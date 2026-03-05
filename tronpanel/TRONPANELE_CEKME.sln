@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.4.11519.219 insiders
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TRONPANELE_CEKME", "TRONPANELE_CEKME\TRONPANELE_CEKME.csproj", "{6077EA1A-DAE3-C727-F035-BE8587D2F0E2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6077EA1A-DAE3-C727-F035-BE8587D2F0E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6077EA1A-DAE3-C727-F035-BE8587D2F0E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6077EA1A-DAE3-C727-F035-BE8587D2F0E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6077EA1A-DAE3-C727-F035-BE8587D2F0E2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {237E9468-2EED-4675-9454-79274252CB7B}
+	EndGlobalSection
+EndGlobal

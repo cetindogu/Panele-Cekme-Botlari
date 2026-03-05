@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en" data-sidenav-size="default" data-layout-mode="fluid" data-layout-position="fixed" data-menu-color="dark" data-topbar-color="light">
+
+<head>
+    <meta charset="utf-8" />
+<title>Bekleyen Çekimler | Paycent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta content="Finans Paneli" name="description" />
+<meta content="MNT" name="author" />
+<meta name="csrf-token" content="bKOg4TmCWjUsRN6KfV2nS76rqXB7EV87vBqEz6xL" />
+<link rel="shortcut icon" href="/assets/images/favicon.png">        <link href="/assets/css/app.min.css" rel="stylesheet" type="text/css" id="app-style" />
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+<link href="/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+<script type="text/javascript" src="/assets/js/tool.js" charset="UTF-8"></script>
+<script src="https://cdn.lordicon.com/lordicon.js"></script>
+<link rel="modulepreload" href="https://win.tronpanel.com/build/assets/head-CczZnHhn.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/moment-BSt0LfbJ.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/config-DPgwGjCu.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/notify-BqhsQq2R.js" /><script type="module" src="https://win.tronpanel.com/build/assets/head-CczZnHhn.js" data-navigate-track="reload"></script><script type="module" src="https://win.tronpanel.com/build/assets/config-DPgwGjCu.js" data-navigate-track="reload"></script><script type="module" src="https://win.tronpanel.com/build/assets/notify-BqhsQq2R.js" data-navigate-track="reload"></script></head>
+
+<body>
+    
+    <div class="wrapper">
+
+        <!-- ========== Topbar Start ========== -->
+<div class="navbar-custom">
+    <div class="topbar container-fluid">
+        <div class="d-flex align-items-center gap-1">
+
+            <!-- Topbar Brand Logo -->
+            <div class="logo-topbar">
+                <!-- Logo light 
+                <a href="/" class="logo-light">
+                    <span class="logo-lg">
+                        <img src="/images/logo.png" alt="logo">
+                    </span>
+                    <span class="logo-sm">
+                        <img src="/images/logo-sm.png" alt="small logo">
+                    </span>
+                </a>
+-->
+                <!-- Logo Dark 
+                <a href="/" class="logo-dark">
+                    <span class="logo-lg">
+                        <img src="/images/logo-dark.png" alt="dark logo">
+                    </span>
+                    <span class="logo-sm">
+                        <img src="/images/logo-sm.png" alt="small logo">
+                    </span>
+                </a>
+                -->
+            </div>
+
+            <!-- Sidebar Menu Toggle Button -->
+            <button class="button-toggle-menu">
+                <i class="ri-menu-line"></i>
+            </button>
+
+            <!-- Horizontal Menu Toggle Button -->
+            <button class="navbar-toggle" data-bs-toggle="collapse" data-bs-target="#topnav-menu-content">
+                <div class="lines">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </button>
+
+        </div>
+
+        <ul class="topbar-menu d-flex align-items-center gap-3">
+            <li class="dropdown d-lg-none">
+                <a class="nav-link dropdown-toggle arrow-none" data-bs-toggle="dropdown" href="#" role="button"
+                    aria-haspopup="false" aria-expanded="false">
+                    <i class="ri-search-line fs-22"></i>
+                </a>
+                <div class="dropdown-menu dropdown-menu-animated dropdown-lg p-0">
+                    <form class="p-3">
+                        <input type="search" class="form-control" placeholder="Search ..."
+                            aria-label="Recipient's username">
+                    </form>
+                </div>
+            </li>
+
+            <li class="d-none d-sm-inline-block">
+                <a class="nav-link" data-bs-toggle="offcanvas" href="#theme-settings-offcanvas">
+                    <i class="ri-settings-3-line fs-22"></i>
+                </a>
+            </li>
+
+            <li class="d-none d-sm-inline-block">
+                <div class="nav-link" id="light-dark-mode">
+                    <i class="ri-moon-line fs-22"></i>
+                </div>
+            </li>
+
+            <li class="dropdown">
+                <a class="nav-link dropdown-toggle arrow-none nav-user" data-bs-toggle="dropdown" href="#" role="button"
+                    aria-haspopup="false" aria-expanded="false">
+                    <span class="account-user-avatar">
+                        <img src="/assets/images/gamer.png" alt="user-image" width="32" class="rounded-circle">
+                    </span>
+                    <span class="d-lg-block d-none">
+                        <h5 class="my-0 fw-normal">wf5 <i
+                                class="ri-arrow-down-s-line d-none d-sm-inline-block align-middle"></i></h5>
+                    </span>
+                </a>
+                <div class="dropdown-menu dropdown-menu-end dropdown-menu-animated profile-dropdown">
+                    <!-- item-->
+                    <div class=" dropdown-header noti-title">
+                        <h6 class="text-overflow m-0">Hoşgeldin !</h6>
+                    </div>
+                    <a href="/profile" class="dropdown-item">
+                        <i class="ri-account-circle-line fs-18 align-middle me-1"></i>
+                        <span>Profil</span>
+                    </a>
+                     <a class="dropdown-item " href="javascript:void();"
+                                onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                                <i class="ri-logout-box-line fs-18 align-middle me-1"></i>
+                                <span>Çıkış Yap</span></a>
+                            <form id="logout-form" action="https://win.tronpanel.com/logout" method="POST"
+                                style="display: none;">
+                                <input type="hidden" name="_token" value="bKOg4TmCWjUsRN6KfV2nS76rqXB7EV87vBqEz6xL" autocomplete="off">                            </form>
+                </div>
+            </li>
+        </ul>
+    </div>
+</div>        <div class="leftside-menu">
+    
+    <a href="/" class="logo logo-light">
+        <span class="">
+            <img src="/assets/images/logo-light.png?" alt="logo" width="200">
+        </span>
+    </a>
+    <a href="/" class="logo logo-dark">
+        <span class="">
+            <img src="/assets/images/logo-light.png?" alt="dark logo" height="42">
+        </span>
+    </a>
+    <div class="h-100" id="leftside-menu-container" data-simplebar>
+        <ul class="side-nav">
+
+            <li class="side-nav-title">İşlemler</li>
+
+            <li class="side-nav-item">
+                <a href="/" class="side-nav-link">
+                    <i class="ri-home-heart-line"></i>
+                    <span> Ana Sayfa </span>
+                </a>
+            </li>
+            
+            <li class="side-nav-title">Bekleyen İşlemler</li>
+            <li class="side-nav-item">
+                <a href="/pendings/deposits" class="side-nav-link">
+                    <i class="ri-arrow-down-circle-line"></i>
+                    <span class="badge bg-danger float-end "><b class="ddpc">0</b></span>
+                    <span>Yatırımlar </span>
+                </a>
+            </li>
+            <li class="side-nav-item">
+                <a href="/pendings/withdraws" class="side-nav-link">
+                    <i class="ri-arrow-up-circle-line"></i>
+                    <span class="badge bg-danger float-end"><b class="wwtc">0</b></span>
+                    <span>Çekimler </span>
+                </a>
+            </li>
+            
+                        <li class="side-nav-title">Diğer İşlemler</li>
+            <li class="side-nav-item">
+                <a data-bs-toggle="collapse" href="#sidebarBaseUI" aria-expanded="false" aria-controls="sidebarBaseUI"
+                    class="side-nav-link">
+                    <i class="ri-briefcase-line"></i>
+                    <span> Hesap İşlemleri </span>
+                    <span class="menu-arrow"></span>
+                </a>
+                <div class="collapse" id="sidebarBaseUI">
+                    <ul class="side-nav-second-level">
+                        <li>
+                            <a href="/accounts/banks">Banka Hesapları</a>
+                        </li>
+                    </ul>
+                </div>
+            </li>
+                        <li class="side-nav-title">Tamamlanan İşlemler</li>
+
+            <li class="side-nav-item">
+                <a href="/deposits" class="side-nav-link">
+                    <i class="ri-arrow-down-circle-line"></i>
+                    <span>Yatırımlar </span>
+                </a>
+            </li>
+            <li class="side-nav-item">
+                <a href="/withdraws" class="side-nav-link">
+                    <i class="ri-arrow-up-circle-line"></i>
+                    <span>Çekimler </span>
+                </a>
+            </li>
+            <li class="side-nav-item">
+                <a data-bs-toggle="collapse" href="#sidebarPages" aria-expanded="false" aria-controls="sidebarPages"
+                    class="side-nav-link">
+                    <i class="ri-pages-line"></i>
+                    <span> Raporlar </span>
+                    <span class="menu-arrow"></span>
+                </a>
+                <div class="collapse" id="sidebarPages">
+                    <ul class="side-nav-second-level">
+                        <li>
+                            <a href="/report/quickly">Hızlı Rapor</a>
+                        </li>
+                                            </ul>
+                </div>
+            </li>
+
+                    </ul>
+
+        <div class="clearfix"></div>
+    </div>
+</div>
+        <div class="content-page">
+            <div class="content">
+                <div class="container-fluid">
+                    <div class="row">
+    <div class="col-12">
+        <div class="page-title-box">
+            <div class="page-title-right">
+            </div>
+            <h4 class="page-title">Bekleyen Çekimler</h4>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="card">
+        <div class="card-body table-responsive p-0">
+            <table class="table align-middle table-nowrap mb-0 pendr">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Site</th>
+                        <th scope="col">Üye ID</th>
+                        <th scope="col">Banka</th>
+                        <th scope="col">Ad Soyad</th>
+                        <th scope="col">IBAN</th>
+                        <th scope="col">Miktar</th>
+                        <th scope="col">Durum</th>
+                        <th scope="col">Tarih</th>
+                        <th scope="col" width="5">İşlem</th>
+                                             </tr>
+                </thead>
+                <tbody id="pendingList">
+                    <tr>
+                        <td colspan="9">
+                            <div class="noresult">
+                                <div class="text-center">
+                                    <lord-icon
+    src="https://cdn.lordicon.com/kndkiwmf.json"
+    trigger="loop"
+    stroke="bold"
+    style="width:125px;height:125px">
+</lord-icon><br>
+Gösterilecek Kayıt Bulunamadı.
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                </tbody>
+            </table>
+    </div>
+    </div>
+    
+    
+</div>
+
+<div class="modal fade" id="approveModal" aria-hidden="true" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                <lord-icon src="https://cdn.lordicon.com/lupuorrc.json" trigger="loop"
+                    colors="primary:#f7b84b,secondary:#405189" style="width:130px;height:130px">
+                </lord-icon>
+                <div class="pt-4">
+                    <h4>İşlem Onaylıyorsunuz !</h4>
+                    <p class="text-muted"> İşleme Devam Etmek İçin Lütfen Onaylayın</p>
+                    <div class="form-floating">
+                                                <input type="text" class="form-control notu" id="firstnamefloatingInput" placeholder="Enter your firstname" style="background-color: antiquewhite;">
+                                                <label for="firstnamefloatingInput">Çekim İşlemini Hangi Hesaptan Yolladınız? Zorunlu Alandır</label>
+                                            </div>
+                                            <br />
+                    <button class="btn btn-success w-100" data-bs-dismiss="modal" onclick="app.approve();">Onaylıyorum İşleme
+                        Devam Et</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="redModal" aria-hidden="true" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center">
+                <lord-icon src="https://cdn.lordicon.com/etwtznjn.json" trigger="loop"
+                    colors="primary:#f7b84b,secondary:#405189" style="width:130px;height:130px">
+                </lord-icon>
+                <div class="pt-4">
+                    <h4>İşlemi İptal Ediyorsunuz !</h4>
+                    <p class="text-muted"> İşleme Devam Etmek İçin Lütfen Onaylayın</p>
+                    <div class="form-floating">
+                                                <input type="text" class="form-control notuu" id="firstnamefloatingInput" placeholder="Enter your firstname" style="background-color: antiquewhite;">
+                                                <label for="firstnamefloatingInput">İşlem Notu</label>
+                                            </div>
+                                            <br />
+                    <button class="btn btn-danger w-100" onclick="app.red();" data-bs-dismiss="modal">Onaylıyorum İşleme Devam
+                        Et</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+                </div>
+            </div>
+            <!-- Footer Start -->
+
+<div id="main_modal" class="modal " tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header modal-colored-header bg-primary">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="close-modal"></button>
+            </div>
+          
+            <div class="alert alert-danger d-none m-3"></div>
+            <div class="alert alert-secondary d-none m-3"></div>			  
+            <div class="modal-body">
+            
+            </div>
+          
+        </div>
+    </div>
+</div>
+<!-- end Footer -->
+<style>
+
+.blink_me {
+  animation: blinker 1s linear infinite;
+}
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}
+    .modal-body::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+    }
+    
+    .modal-body::-webkit-scrollbar-track {
+      -webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3);
+      -webkit-border-radius: 10px;
+      border-radius: 10px;
+    }
+    
+    .modal-body::-webkit-scrollbar-thumb {
+      -webkit-border-radius: 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.3);
+      -webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-body::-webkit-scrollbar-thumb:window-inactive {
+      background: rgba(255, 255, 255, 0.3);
+    }
+            </style>        </div>
+
+    </div>
+
+    
+    <!-- Theme Settings -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="theme-settings-offcanvas">
+    <div class="d-flex align-items-center bg-primary p-3 offcanvas-header">
+        <h5 class="text-white m-0">Görünüm Ayarları</h5>
+        <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body p-0">
+        <div data-simplebar class="h-100">
+            <div class="p-3">
+                <h5 class="mb-3 fs-16 fw-bold">Renk Şeması</h5>
+
+                <div class="row">
+                    <div class="col-4">
+                        <div class="form-check form-switch card-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="data-bs-theme" id="layout-color-light" value="light">
+                            <label class="form-check-label" for="layout-color-light">
+                                <img src="/assets/images/layouts/light.png" alt="" class="img-fluid">
+                            </label>
+                        </div>
+                        <h5 class="font-14 text-center text-muted mt-2">Açık</h5>
+                    </div>
+
+                    <div class="col-4">
+                        <div class="form-check form-switch card-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="data-bs-theme" id="layout-color-dark" value="dark">
+                            <label class="form-check-label" for="layout-color-dark">
+                                <img src="/assets/images/layouts/dark.png" alt="" class="img-fluid">
+                            </label>
+                        </div>
+                        <h5 class="font-14 text-center text-muted mt-2">Koyu</h5>
+                    </div>
+                </div>
+
+                <div id="layout-width">
+                    <h5 class="my-3 fs-16 fw-bold">Layout Mode</h5>
+
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-layout-mode" id="layout-mode-fluid" value="fluid">
+                                <label class="form-check-label" for="layout-mode-fluid">
+                                    <img src="/assets/images/layouts/light.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Fluid</h5>
+                        </div>
+
+                        <div class="col-4">
+                            <div id="layout-boxed">
+                                <div class="form-check form-switch card-switch mb-1">
+                                    <input class="form-check-input" type="checkbox" name="data-layout-mode" id="layout-mode-boxed" value="boxed">
+                                    <label class="form-check-label" for="layout-mode-boxed">
+                                        <img src="/assets/images/layouts/boxed.png" alt="" class="img-fluid">
+                                    </label>
+                                </div>
+                                <h5 class="font-14 text-center text-muted mt-2">Boxed</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h5 class="my-3 fs-16 fw-bold">Topbar Color</h5>
+
+                <div class="row">
+                    <div class="col-4">
+                        <div class="form-check form-switch card-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="data-topbar-color" id="topbar-color-light" value="light">
+                            <label class="form-check-label" for="topbar-color-light">
+                                <img src="/assets/images/layouts/light.png" alt="" class="img-fluid">
+                            </label>
+                        </div>
+                        <h5 class="font-14 text-center text-muted mt-2">Light</h5>
+                    </div>
+
+                    <div class="col-4">
+                        <div class="form-check form-switch card-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="data-topbar-color" id="topbar-color-dark" value="dark">
+                            <label class="form-check-label" for="topbar-color-dark">
+                                <img src="/assets/images/layouts/topbar-dark.png" alt="" class="img-fluid">
+                            </label>
+                        </div>
+                        <h5 class="font-14 text-center text-muted mt-2">Dark</h5>
+                    </div>
+                </div>
+
+                <div>
+                    <h5 class="my-3 fs-16 fw-bold">Menu Color</h5>
+
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-menu-color" id="leftbar-color-light" value="light">
+                                <label class="form-check-label" for="leftbar-color-light">
+                                    <img src="/assets/images/layouts/sidebar-light.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Light</h5>
+                        </div>
+
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-menu-color" id="leftbar-color-dark" value="dark">
+                                <label class="form-check-label" for="leftbar-color-dark">
+                                    <img src="/assets/images/layouts/light.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Dark</h5>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="sidebar-size">
+                    <h5 class="my-3 fs-16 fw-bold">Sidebar Size</h5>
+
+                    <div class="row">
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-default" value="default">
+                                <label class="form-check-label" for="leftbar-size-default">
+                                    <img src="/assets/images/layouts/light.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Default</h5>
+                        </div>
+
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-compact" value="compact">
+                                <label class="form-check-label" for="leftbar-size-compact">
+                                    <img src="/assets/images/layouts/compact.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Compact</h5>
+                        </div>
+
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-small" value="condensed">
+                                <label class="form-check-label" for="leftbar-size-small">
+                                    <img src="/assets/images/layouts/sm.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Condensed</h5>
+                        </div>
+
+
+                        <div class="col-4">
+                            <div class="form-check form-switch card-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="data-sidenav-size" id="leftbar-size-full" value="full">
+                                <label class="form-check-label" for="leftbar-size-full">
+                                    <img src="/assets/images/layouts/full.png" alt="" class="img-fluid">
+                                </label>
+                            </div>
+                            <h5 class="font-14 text-center text-muted mt-2">Full Layout</h5>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="layout-position">
+                    <h5 class="my-3 fs-16 fw-bold">Layout Position</h5>
+
+                    <div class="btn-group checkbox" role="group">
+                        <input type="radio" class="btn-check" name="data-layout-position" id="layout-position-fixed" value="fixed">
+                        <label class="btn btn-soft-primary w-sm" for="layout-position-fixed">Fixed</label>
+
+                        <input type="radio" class="btn-check" name="data-layout-position" id="layout-position-scrollable" value="scrollable">
+                        <label class="btn btn-soft-primary w-sm ms-0" for="layout-position-scrollable">Scrollable</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="offcanvas-footer border-top p-3 text-center">
+        <div class="row">
+            <div class="col-12">
+                <button type="button" class="btn btn-warning w-100" id="reset-layout">Varsayılana Dön</button>
+            </div>
+        </div>
+    </div>
+</div>
+ 
+
+<link rel="modulepreload" href="https://win.tronpanel.com/build/assets/layout-kSHTeeH4.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/main-DToqxq3r.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/moment-BSt0LfbJ.js" /><link rel="modulepreload" href="https://win.tronpanel.com/build/assets/tools-DYS0vhmj.js" /><script type="module" src="https://win.tronpanel.com/build/assets/layout-kSHTeeH4.js" data-navigate-track="reload"></script><script type="module" src="https://win.tronpanel.com/build/assets/main-DToqxq3r.js" data-navigate-track="reload"></script><script type="module" src="https://win.tronpanel.com/build/assets/tools-DYS0vhmj.js" data-navigate-track="reload"></script><script src="https://cdn.datatables.net/2.1.3/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/2.1.3/js/dataTables.bootstrap5.min.js"></script>
+<link href="//cdn.datatables.net/2.1.3/css/dataTables.bootstrap5.min.css" rel="stylesheet" type="text/css" />
+<script src="//cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.js" integrity="sha512-79j1YQOJuI8mLseq9icSQKT6bLlLtWknKwj1OpJZMdPt2pFBry3vQTt+NZuJw7NSd1pHhZlu0s12Ngqfa371EA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastify-js/1.6.1/toastify.min.css" integrity="sha512-UiKdzM5DL+I+2YFxK+7TDedVyVm7HMp/bN85NeWMJNYortoll+Nd6PU9ZDrZiaOsdarOyk9egQm6LOJZi36L2g==" crossorigin="anonymous" referrerpolicy="no-referrer" /><!-- bundle -->
+<!-- bundle -->
+<!-- App js -->
+<link rel="modulepreload" href="https://win.tronpanel.com/build/assets/pendingsw-BpkCRstt.js" /><script type="module" src="https://win.tronpanel.com/build/assets/pendingsw-BpkCRstt.js" data-navigate-track="reload"></script><script>
+                
+
+        var user = "wf5";
+        var groupsfr = "Taseron";
+        
+                
+        </script>
+<style>
+ .heart {
+	font-size: 150px;
+	color: #e00;
+	animation: beat 1s infinite alternate;
+	transform-origin: center;
+position: fixed;
+top: 0;
+bottom: 0;
+left: 0;
+right: 0;
+margin: auto;
+}
+
+/* Heart beat animation */
+@keyframes beat{
+	to { transform: scale(1.4); }
+}
+    </style>
+</body>
+
+</html>
