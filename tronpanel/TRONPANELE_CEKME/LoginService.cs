@@ -38,7 +38,6 @@ namespace TRONPANELE_CEKME.Services
 
                 // 1. Get login page to extract CSRF token if exists
                 var loginPageContent = await _httpClient.GetAsync(_settings.LoginUrl);
-                _logger.LogDebug("Login sayfası içeriği: {Content}", loginPageContent.Substring(0, Math.Min(500, loginPageContent.Length)));
                 var token = ExtractTokenFromHtml(loginPageContent);
                 _logger.LogInformation("🔑 Alınan token: {Token}", token ?? "Bulunamadı");
 
