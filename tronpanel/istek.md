@@ -5,7 +5,7 @@ Bu belge, TRONPANELE_CEKME konsol uygulamasının gereksinimlerini ve çalışma
 ## 1. Genel Gereksinimler
 - **Teknoloji:** .NET 10 Console Application (C#).
 - **Hedef Site:** `https://win.tronpanel.com`
-- **Kullanıcı Bilgileri:** `baron@fast.com` / `223322433` (appsettings.json'dan okunacak).
+- **Kullanıcı Bilgileri:** Kullanıcı adı kod içerisinde gömülü (obfuscated), şifre `appsettings.json`'dan okunacak.
 - **Sayfa:** Çekimler sayfası (`https://win.tronpanel.com/pendings/withdraws`).
 
 ## 2. Fonksiyonel Gereksinimler

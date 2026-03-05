@@ -33,6 +33,7 @@ namespace TRONPANELE_CEKME
                     .ConfigureServices((context, services) =>
                     {
                         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
+                        services.AddSingleton<ICredentialProvider, ObfuscatedCredentialProvider>();
                         services.AddSingleton<IHttpClientService, HttpClientService>();
                         services.AddSingleton<ILoginService, LoginService>();
                         services.AddSingleton<IWithdrawalMonitorService, WithdrawalMonitorService>();
@@ -41,8 +42,15 @@ namespace TRONPANELE_CEKME
 
                 // 4. Run the application
                 using var scope = host.Services.CreateScope();
+                var credentialProvider = scope.ServiceProvider.GetRequiredService<ICredentialProvider>();
                 var loginService = scope.ServiceProvider.GetRequiredService<ILoginService>();
                 var monitorService = scope.ServiceProvider.GetRequiredService<IWithdrawalMonitorService>();
+
+                // Kullanıcı adını renkli yazdır
+                Console.Write("👤 Kullanıcı: ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine(credentialProvider.GetUsername());
+                Console.ResetColor();
 
                 // 5. Perform Login
                 if (await loginService.LoginAsync())

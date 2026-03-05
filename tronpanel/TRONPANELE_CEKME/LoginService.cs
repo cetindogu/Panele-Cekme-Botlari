@@ -14,15 +14,18 @@ namespace TRONPANELE_CEKME.Services
     {
         private readonly IHttpClientService _httpClient;
         private readonly ILogger<LoginService> _logger;
+        private readonly ICredentialProvider _credentialProvider;
         private readonly LoginSettings _settings;
 
         public LoginService(
             IHttpClientService httpClient,
             ILogger<LoginService> logger,
+            ICredentialProvider credentialProvider,
             IOptions<AppSettings> settings)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _credentialProvider = credentialProvider;
             _settings = settings.Value.Login;
         }
 
@@ -30,7 +33,8 @@ namespace TRONPANELE_CEKME.Services
         {
             try
             {
-                _logger.LogInformation("🔐 Giriş işlemi başlatılıyor: {Username}", _settings.Username);
+                var username = _credentialProvider.GetUsername();
+                _logger.LogInformation("🔐 Giriş işlemi başlatılıyor...");
 
                 // 1. Get login page to extract CSRF token if exists
                 var loginPageContent = await _httpClient.GetAsync(_settings.LoginUrl);
@@ -41,7 +45,7 @@ namespace TRONPANELE_CEKME.Services
                 // 2. Prepare login data
                 var loginData = new Dictionary<string, string>
                 {
-                    ["email"] = _settings.Username,
+                    ["email"] = username,
                     ["password"] = _settings.Password,
                     ["_token"] = token ?? ""
                 };
