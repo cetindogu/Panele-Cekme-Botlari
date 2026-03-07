@@ -37,14 +37,13 @@ namespace TRONPANELE_CEKME
                         services.AddSingleton<IHttpClientService, HttpClientService>();
                         services.AddSingleton<ILoginService, LoginService>();
                         services.AddSingleton<IWithdrawalMonitorService, WithdrawalMonitorService>();
+                        services.AddHostedService<WithdrawalMonitorService>(sp => 
+                            (WithdrawalMonitorService)sp.GetRequiredService<IWithdrawalMonitorService>());
                     })
                     .Build();
 
                 // 4. Run the application
-                using var scope = host.Services.CreateScope();
-                var credentialProvider = scope.ServiceProvider.GetRequiredService<ICredentialProvider>();
-                var loginService = scope.ServiceProvider.GetRequiredService<ILoginService>();
-                var monitorService = scope.ServiceProvider.GetRequiredService<IWithdrawalMonitorService>();
+                var credentialProvider = host.Services.GetRequiredService<ICredentialProvider>();
 
                 // Kullanıcı adını renkli yazdır
                 Console.Write("👤 Kullanıcı: ");
@@ -52,25 +51,7 @@ namespace TRONPANELE_CEKME
                 Console.WriteLine(credentialProvider.GetUsername());
                 Console.ResetColor();
 
-                // 5. Perform Login
-                if (await loginService.LoginAsync())
-                {
-                    Log.Information("✅ Giriş başarılı. İzleme başlatılıyor...");
-                    
-                    var cts = new CancellationTokenSource();
-                    Console.CancelKeyPress += (s, e) =>
-                    {
-                        Log.Information("🛑 Uygulama kapatılıyor...");
-                        cts.Cancel();
-                        e.Cancel = true;
-                    };
-
-                    await monitorService.StartMonitoringAsync(cts.Token);
-                }
-                else
-                {
-                    Log.Fatal("❌ Giriş yapılamadı! Uygulama sonlandırılıyor.");
-                }
+                await host.RunAsync();
             }
             catch (Exception ex)
             {
@@ -78,12 +59,8 @@ namespace TRONPANELE_CEKME
             }
             finally
             {
-                Log.Information("👋 Uygulama sonlandırıldı. Herhangi bir tuşa basarak çıkın.");
+                Log.Information("👋 Uygulama sonlandırıldı.");
                 Log.CloseAndFlush();
-                if (!Console.IsInputRedirected)
-                {
-                    Console.ReadKey();
-                }
             }
         }
     }

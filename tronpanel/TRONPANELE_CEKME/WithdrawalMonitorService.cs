@@ -2,6 +2,7 @@ using System.Globalization;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using TRONPANELE_CEKME.Models;
 
@@ -12,11 +13,13 @@ namespace TRONPANELE_CEKME.Services
         Task StartMonitoringAsync(CancellationToken cancellationToken);
     }
 
-    public class WithdrawalMonitorService : IWithdrawalMonitorService
+    public class WithdrawalMonitorService : BackgroundService, IWithdrawalMonitorService
     {
         private readonly IHttpClientService _httpClient;
         private readonly ILogger<WithdrawalMonitorService> _logger;
+        private readonly ILoginService _loginService;
         private readonly WithdrawalSettings _settings;
+        private readonly IHostApplicationLifetime _lifetime;
         private decimal _totalProcessedAmount = 0;
         private int _totalProcessedCount = 0;
         
@@ -26,23 +29,52 @@ namespace TRONPANELE_CEKME.Services
         public WithdrawalMonitorService(
             IHttpClientService httpClient,
             ILogger<WithdrawalMonitorService> logger,
-            IOptions<AppSettings> settings)
+            IOptions<AppSettings> settings,
+            ILoginService loginService,
+            IHostApplicationLifetime lifetime)
         {
             _httpClient = httpClient;
             _logger = logger;
+            _loginService = loginService;
             _settings = settings.Value.Withdrawals;
+            _lifetime = lifetime;
         }
 
         private string? _csrfToken;
 
-        public async Task StartMonitoringAsync(CancellationToken cancellationToken)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("🚀 Çekim izleme başlatıldı. (PreviewMode: {PreviewMode})", _settings.PreviewMode);
             _logger.LogInformation("📊 Limitler: Min Tutar: {Min}, Max Tutar: {Max}, Toplam Max Tutar: {TotalMax}, Max Kayıt: {MaxCount}",
                 _settings.MinAmount, _settings.MaxAmount, _settings.MaxTotalAmount, _settings.MaxRecordCount);
 
-            while (!cancellationToken.IsCancellationRequested)
+            // Perform Login once at start
+            if (!await _loginService.LoginAsync())
             {
+                _logger.LogCritical("❌ Giriş yapılamadı! Uygulama sonlandırılıyor.");
+                _lifetime.StopApplication();
+                return;
+            }
+
+            _logger.LogInformation("✅ Giriş başarılı. İzleme başlatılıyor...");
+
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                // Check limits BEFORE starting a new poll
+                if (_totalProcessedCount >= _settings.MaxRecordCount)
+                {
+                    _logger.LogWarning("⛔ Maksimum kayıt sayısına ({MaxCount}) ulaşıldı. Uygulama sonlandırılıyor.", _settings.MaxRecordCount);
+                    _lifetime.StopApplication();
+                    break;
+                }
+
+                if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
+                {
+                    _logger.LogWarning("⛔ Bir sonraki minimum işlem tutarı ({MinAmount}) ile maksimum tutar ({MaxTotal}) aşılacaktır. Uygulama sonlandırılıyor.", _settings.MinAmount, _settings.MaxTotalAmount);
+                    _lifetime.StopApplication();
+                    break;
+                }
+
                 try
                 {
                     // 1. First, ensure we have a CSRF token by fetching the page
@@ -52,7 +84,7 @@ namespace TRONPANELE_CEKME.Services
                     if (string.IsNullOrEmpty(_csrfToken))
                     {
                         _logger.LogWarning("⚠️ CSRF token alınamadı. Oturum kapanmış olabilir.");
-                        await Task.Delay(10000, cancellationToken);
+                        await Task.Delay(10000, stoppingToken);
                         continue;
                     }
 
@@ -63,7 +95,7 @@ namespace TRONPANELE_CEKME.Services
                     if (string.IsNullOrWhiteSpace(jsonResponse) || jsonResponse.Trim().StartsWith("<"))
                     {
                         _logger.LogWarning("⚠️ JSON beklenirken HTML veya boş yanıt alındı.");
-                        await Task.Delay(15000, cancellationToken);
+                        await Task.Delay(15000, stoppingToken);
                         continue;
                     }
 
@@ -72,7 +104,7 @@ namespace TRONPANELE_CEKME.Services
                     if (response == null || !response.Status)
                     {
                         _logger.LogWarning("⚠️ Veri çekilemedi veya geçersiz yanıt: {Message}", response?.Message ?? "Boş yanıt");
-                        await Task.Delay(_settings.PollingIntervalMs, cancellationToken);
+                        await Task.Delay(_settings.PollingIntervalMs, stoppingToken);
                         continue;
                     }
 
@@ -91,7 +123,7 @@ namespace TRONPANELE_CEKME.Services
 
                     foreach (var data in candidates)
                     {
-                        if (cancellationToken.IsCancellationRequested) break;
+                        if (stoppingToken.IsCancellationRequested) break;
 
                         decimal.TryParse(data.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount);
 
@@ -110,29 +142,31 @@ namespace TRONPANELE_CEKME.Services
                         if (_totalProcessedCount >= _settings.MaxRecordCount)
                         {
                             _logger.LogWarning("⛔ Maksimum kayıt sayısına ({MaxCount}) ulaşıldı. Uygulama sonlandırılıyor.", _settings.MaxRecordCount);
+                            _lifetime.StopApplication();
                             return;
                         }
 
                         if (_totalProcessedAmount + amount > _settings.MaxTotalAmount)
                         {
-                            _logger.LogWarning("⛔ Bu işlemle ({Id} - {Amount:N2}) birlikte maksimum tutar ({MaxTotal}) aşılacaktır. Uygulama sonlandırılıyor.", data.Id, amount, _settings.MaxTotalAmount);
-                            return;
-                        }
-
-                        // Requirement 8: "maksimum çekilen kayıt sayısına ulaşıldığında veya minimum tutar kadar daha işleme alınırsa maksimum tutarı geçecekse sonlanmalıdır."
-                        if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
-                        {
-                            _logger.LogWarning("⛔ Bir sonraki minimum işlem tutarı ({MinAmount}) ile maksimum tutar ({MaxTotal}) aşılacaktır. Uygulama sonlandırılıyor.", _settings.MinAmount, _settings.MaxTotalAmount);
-                            return;
+                            _logger.LogWarning("⚠️ Bu işlem ({Id} - {Amount:N2}) toplam limiti ({MaxTotal}) aşıyor. Atlanıyor, daha küçük tutarlı kayıtlar aranacak.", data.Id, amount, _settings.MaxTotalAmount);
+                            continue; // Skip this one, try others
                         }
 
                         await ProcessDataAsync(data, amount);
                     }
 
+                    // Requirement: "eğer minimum tutar kadar işlem yapıldığında toplamı geçiyorsa sonlanmalı."
+                    if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
+                    {
+                        _logger.LogWarning("⛔ Mevcut toplam ({TotalAmount:N2}) üzerine eklenebilecek minimum tutar ({MinAmount}) bile maksimum limiti ({MaxTotal}) aşıyor. Uygulama sonlandırılıyor.", _totalProcessedAmount, _settings.MinAmount, _settings.MaxTotalAmount);
+                        _lifetime.StopApplication();
+                        return;
+                    }
+
                     // Clean up _lastSeenItems to keep memory usage low (optional, but good practice)
                     if (_lastSeenItems.Count > 1000) _lastSeenItems.Clear();
 
-                    await Task.Delay(_settings.PollingIntervalMs, cancellationToken);
+                    await Task.Delay(_settings.PollingIntervalMs, stoppingToken);
                 }
                 catch (OperationCanceledException)
                 {
@@ -141,9 +175,15 @@ namespace TRONPANELE_CEKME.Services
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "İzleme döngüsü sırasında hata oluştu");
-                    await Task.Delay(5000, cancellationToken);
+                    await Task.Delay(5000, stoppingToken);
                 }
             }
+        }
+
+        public Task StartMonitoringAsync(CancellationToken cancellationToken)
+        {
+            // This is now handled by ExecuteAsync via BackgroundService
+            return Task.CompletedTask;
         }
 
         private async Task ProcessDataAsync(WithdrawalData data, decimal amount)
