@@ -25,13 +25,17 @@ namespace TRONPANELE_CEKME.Services
             {
                 CookieContainer = _cookieContainer,
                 AllowAutoRedirect = false, // Handle redirects manually to see what's happening
-                UseCookies = true
+                UseCookies = true,
+                MaxConnectionsPerServer = 100, // Connection pool limitini artır
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate // GZip desteği ekle
             };
 
             _httpClient = new HttpClient(handler);
+            _httpClient.Timeout = TimeSpan.FromSeconds(10); // Zaman aşımını düşük tut
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
-            _httpClient.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7");
+            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01"); // Varsayılan olarak JSON bekle
             _httpClient.DefaultRequestHeaders.Add("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7");
+            _httpClient.DefaultRequestHeaders.ConnectionClose = false; // Keep-alive'ı zorla
         }
 
         public async Task<string> GetAsync(string url, bool isAjax = false)

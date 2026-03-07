@@ -11,15 +11,21 @@ namespace TRONPANELE_CEKME
     {
         static async Task Main(string[] args)
         {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             // 1. Build configuration
             var configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .Build();
 
-            // 2. Configure Serilog
+            // 2. Configure Serilog - Use code-based sink configuration for better trimming support
             Log.Logger = new LoggerConfiguration()
-                .ReadFrom.Configuration(configuration)
+                .ReadFrom.Configuration(configuration) // Still read levels and other settings
+                .WriteTo.Console() // Explicitly call to ensure it's not trimmed
+                .WriteTo.File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs/log-.txt"), 
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 7)
                 .Enrich.FromLogContext()
                 .CreateLogger();
 

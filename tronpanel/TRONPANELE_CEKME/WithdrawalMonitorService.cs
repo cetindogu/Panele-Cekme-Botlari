@@ -25,6 +25,12 @@ namespace TRONPANELE_CEKME.Services
         
         // Track seen IDs to avoid duplicate logging (cleared when data changes)
         private readonly Dictionary<long, int> _lastSeenItems = new(); 
+        // Track successfully processed IDs to avoid re-processing in the same session
+        private readonly HashSet<long> _processedIds = new();
+        // Track currently active POST requests to avoid spamming the same ID
+        private readonly HashSet<long> _activeProcessingIds = new();
+        // Track last error message per ID to avoid duplicate log spam
+        private readonly Dictionary<long, string> _lastErrorMessages = new();
 
         public WithdrawalMonitorService(
             IHttpClientService httpClient,
@@ -58,6 +64,37 @@ namespace TRONPANELE_CEKME.Services
 
             _logger.LogInformation("✅ Giriş başarılı. İzleme başlatılıyor...");
 
+            // Start 3 parallel workers with staggering
+            int workerCount = 3;
+            var workers = new List<Task>();
+            for (int i = 0; i < workerCount; i++)
+            {
+                workers.Add(RunMonitorLoopAsync(i, stoppingToken));
+                await Task.Delay(300, stoppingToken); // 300ms staggered start
+            }
+
+            await Task.WhenAll(workers);
+        }
+
+        private decimal ParseAmount(string amountStr)
+        {
+            if (string.IsNullOrWhiteSpace(amountStr)) return 0;
+
+            // Sadece rakam ve nokta (.) tutulur, virgül (,) kullanılmamaktadır.
+            var cleaned = new string(amountStr.Where(c => char.IsDigit(c) || c == '.').ToArray());
+
+            if (decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            {
+                return result;
+            }
+
+            return 0;
+        }
+
+        private async Task RunMonitorLoopAsync(int workerId, CancellationToken stoppingToken)
+        {
+            _logger.LogInformation("👷 Worker-{WorkerId} başlatıldı.", workerId);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 // Check limits BEFORE starting a new poll
@@ -68,24 +105,21 @@ namespace TRONPANELE_CEKME.Services
                     break;
                 }
 
-                if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
-                {
-                    _logger.LogWarning("⛔ Bir sonraki minimum işlem tutarı ({MinAmount}) ile maksimum tutar ({MaxTotal}) aşılacaktır. Uygulama sonlandırılıyor.", _settings.MinAmount, _settings.MaxTotalAmount);
-                    _lifetime.StopApplication();
-                    break;
-                }
-
                 try
                 {
-                    // 1. First, ensure we have a CSRF token by fetching the page
-                    var pageHtml = await _httpClient.GetAsync(_settings.PageUrl);
-                    _csrfToken = ExtractTokenFromHtml(pageHtml);
-
+                    // 1. Ensure we have a CSRF token
                     if (string.IsNullOrEmpty(_csrfToken))
                     {
-                        _logger.LogWarning("⚠️ CSRF token alınamadı. Oturum kapanmış olabilir.");
-                        await Task.Delay(10000, stoppingToken);
-                        continue;
+                        // Staggered race to get token if missing
+                        _logger.LogInformation("🔑 Worker-{WorkerId}: CSRF token yenileniyor...", workerId);
+                        var pageHtml = await _httpClient.GetAsync(_settings.PageUrl);
+                        _csrfToken = ExtractTokenFromHtml(pageHtml);
+
+                        if (string.IsNullOrEmpty(_csrfToken))
+                        {
+                            await Task.Delay(5000, stoppingToken);
+                            continue;
+                        }
                     }
 
                     // 2. Get withdrawal list via POST AJAX with the token
@@ -94,8 +128,8 @@ namespace TRONPANELE_CEKME.Services
                     
                     if (string.IsNullOrWhiteSpace(jsonResponse) || jsonResponse.Trim().StartsWith("<"))
                     {
-                        _logger.LogWarning("⚠️ JSON beklenirken HTML veya boş yanıt alındı.");
-                        await Task.Delay(15000, stoppingToken);
+                        _csrfToken = null; // Force refresh
+                        await Task.Delay(1000, stoppingToken);
                         continue;
                     }
 
@@ -103,79 +137,87 @@ namespace TRONPANELE_CEKME.Services
 
                     if (response == null || !response.Status)
                     {
-                        _logger.LogWarning("⚠️ Veri çekilemedi veya geçersiz yanıt: {Message}", response?.Message ?? "Boş yanıt");
+                        if (response?.Message?.Contains("CSRF", StringComparison.OrdinalIgnoreCase) == true) _csrfToken = null;
                         await Task.Delay(_settings.PollingIntervalMs, stoppingToken);
                         continue;
                     }
 
                     var allItems = response.Datas ?? new List<WithdrawalData>();
-                    
-                    // Filter candidates based on criteria
+
                     var candidates = allItems.Where(d => 
-                        d.Proc == 0 && // 0: Beklemede
-                        decimal.TryParse(d.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amt) &&
-                        amt >= _settings.MinAmount && 
-                        amt <= _settings.MaxAmount
-                    ).ToList();
-
-                    _logger.LogInformation("🔍 Toplam: {Total} kayıt | Kriterlere uyan: {CandidateCount} | Toplam İşlenen: {TotalAmount:N2} ({TotalCount} adet)", 
-                        allItems.Count, candidates.Count, _totalProcessedAmount, _totalProcessedCount);
-
-                    foreach (var data in candidates)
                     {
-                        if (stoppingToken.IsCancellationRequested) break;
-
-                        decimal.TryParse(data.Amount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount);
-
-                        // Check if we've already logged/processed this ID
-                        if (_lastSeenItems.ContainsKey(data.Id))
-                        {
-                            continue; // Skip logging/processing duplicate
-                        }
+                        if (d.Proc != 0) return false;
                         
-                        _lastSeenItems[data.Id] = data.Proc;
-
-                        _logger.LogInformation("✨ Yeni aday bulundu: ID: {Id}, Kullanıcı: {User}, Tutar: {Amount:N2}, Site: {Site}", 
-                            data.Id, data.Userid, amount, data.Site);
-
-                        // Check global limits
-                        if (_totalProcessedCount >= _settings.MaxRecordCount)
+                        // Kendi başarıyla işlediğimiz kayıtları tekrar denemeyelim
+                        lock (_processedIds)
                         {
-                            _logger.LogWarning("⛔ Maksimum kayıt sayısına ({MaxCount}) ulaşıldı. Uygulama sonlandırılıyor.", _settings.MaxRecordCount);
-                            _lifetime.StopApplication();
-                            return;
+                            if (_processedIds.Contains(d.Id)) return false;
                         }
 
-                        if (_totalProcessedAmount + amount > _settings.MaxTotalAmount)
+                        try 
                         {
-                            _logger.LogWarning("⚠️ Bu işlem ({Id} - {Amount:N2}) toplam limiti ({MaxTotal}) aşıyor. Atlanıyor, daha küçük tutarlı kayıtlar aranacak.", data.Id, amount, _settings.MaxTotalAmount);
-                            continue; // Skip this one, try others
+                            var amt = ParseAmount(d.Amount);
+                            return amt >= _settings.MinAmount && amt <= _settings.MaxAmount;
                         }
+                        catch { return false; }
+                    }).ToList();
 
-                        await ProcessDataAsync(data, amount);
+                    if (candidates.Any())
+                    {
+                        // Process all candidates in parallel without waiting for them to finish before next poll
+                        foreach (var data in candidates)
+                        {
+                            if (stoppingToken.IsCancellationRequested) break;
+
+                            decimal amount = 0;
+                            try { amount = ParseAmount(data.Amount); } catch { continue; }
+
+                            // LOGLAMA MANTIĞI: Sadece yeni görülen veya durumu değişen adayları logla
+                            bool shouldLog = false;
+                            lock (_lastSeenItems)
+                            {
+                                if (!_lastSeenItems.ContainsKey(data.Id) || _lastSeenItems[data.Id] != data.Proc)
+                                {
+                                    _lastSeenItems[data.Id] = data.Proc;
+                                    shouldLog = true;
+                                }
+                            }
+
+                            if (shouldLog)
+                            {
+                                _logger.LogInformation("✨ Worker-{WorkerId}: Aday ID: {Id}, Tutar: {Amount:N2}", workerId, data.Id, amount);
+                            }
+
+                            if (_totalProcessedCount >= _settings.MaxRecordCount) continue;
+                            if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) continue;
+
+                            // İŞLEME MANTIĞI: Bu ID için hali hazırda devam eden bir istek (POST) varsa yeni istek başlatma
+                            lock (_activeProcessingIds)
+                            {
+                                if (_activeProcessingIds.Contains(data.Id)) continue;
+                                _activeProcessingIds.Add(data.Id);
+                            }
+
+                            // Fire and forget (don't await) to continue polling immediately
+                            _ = ProcessDataAsync(data, amount);
+                        }
                     }
 
-                    // Requirement: "eğer minimum tutar kadar işlem yapıldığında toplamı geçiyorsa sonlanmalı."
+                    // Global limit check
                     if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
                     {
-                        _logger.LogWarning("⛔ Mevcut toplam ({TotalAmount:N2}) üzerine eklenebilecek minimum tutar ({MinAmount}) bile maksimum limiti ({MaxTotal}) aşıyor. Uygulama sonlandırılıyor.", _totalProcessedAmount, _settings.MinAmount, _settings.MaxTotalAmount);
+                        _logger.LogWarning("⛔ Limit aşıldı. Uygulama sonlandırılıyor.");
                         _lifetime.StopApplication();
                         return;
                     }
 
-                    // Clean up _lastSeenItems to keep memory usage low (optional, but good practice)
-                    if (_lastSeenItems.Count > 1000) _lastSeenItems.Clear();
-
                     await Task.Delay(_settings.PollingIntervalMs, stoppingToken);
                 }
-                catch (OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "İzleme döngüsü sırasında hata oluştu");
-                    await Task.Delay(5000, stoppingToken);
+                    _logger.LogError("⚠️ Worker-{WorkerId} Hatası: {Message}", workerId, ex.Message);
+                    // Hata durumunda 1 saniye bekle (Spam koruması ve sunucuya nefes aldırma)
+                    await Task.Delay(1000, stoppingToken);
                 }
             }
         }
@@ -188,39 +230,54 @@ namespace TRONPANELE_CEKME.Services
 
         private async Task ProcessDataAsync(WithdrawalData data, decimal amount)
         {
-            if (_settings.PreviewMode)
-            {
-                // Already logged in loop
-                return;
-            }
+            if (_settings.PreviewMode) return;
 
             try
             {
-                _logger.LogInformation("⚙️ İşleme alınıyor: ID: {Id}, Tutar: {Amount:N2}...", data.Id, amount);
-
+                // Minimize logging in the critical path
                 var postData = new Dictionary<string, string> 
                 { 
                     ["data-id"] = data.Id.ToString(),
                     ["_token"] = _csrfToken ?? ""
                 };
+                
                 var responseJson = await _httpClient.PostAjaxAsync(_settings.ProcessUrl, postData);
                 var response = JsonConvert.DeserializeObject<ProcessResponse>(responseJson);
 
                 if (response != null && response.Status)
                 {
-                    _logger.LogInformation("✅ Başarıyla işleme alındı! ID: {Id}, Yanıt: {Message}", data.Id, response.Message);
+                    _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2}", data.Id, amount);
                     _totalProcessedAmount += amount;
                     _totalProcessedCount++;
-                    _lastSeenItems[data.Id] = 1; // Mark as processed to avoid re-processing if still in response
+                    lock (_processedIds) { _processedIds.Add(data.Id); }
+                    lock (_lastSeenItems) { _lastSeenItems[data.Id] = 1; }
+                    lock (_lastErrorMessages) { _lastErrorMessages.Remove(data.Id); }
                 }
                 else
                 {
-                    _logger.LogError("❌ İşleme alınamadı! ID: {Id}, Yanıt: {Message}", data.Id, response?.Message ?? "Boş yanıt");
+                    string msg = response?.Message ?? "Boş Yanıt";
+                    bool shouldLogErr = false;
+                    lock (_lastErrorMessages)
+                    {
+                        if (!_lastErrorMessages.ContainsKey(data.Id) || _lastErrorMessages[data.Id] != msg)
+                        {
+                            _lastErrorMessages[data.Id] = msg;
+                            shouldLogErr = true;
+                        }
+                    }
+                    if (shouldLogErr)
+                    {
+                        _logger.LogWarning("❌ Alınamadı! ID: {Id}, Yanıt: {Message}", data.Id, msg);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Kayıt işleme sırasında hata oluştu: ID: {Id}", data.Id);
+                _logger.LogError("⚠️ İşlem Hatası: ID: {Id}, Mesaj: {Message}", data.Id, ex.Message);
+            }
+            finally
+            {
+                lock (_activeProcessingIds) { _activeProcessingIds.Remove(data.Id); }
             }
         }
 
