@@ -21,8 +21,10 @@ namespace TRONPANELE_CEKME.Services
         private readonly ILoginService _loginService;
         private readonly WithdrawalSettings _settings;
         private readonly IHostApplicationLifetime _lifetime;
+        
         private decimal _totalProcessedAmount = 0;
         private int _totalProcessedCount = 0;
+        private readonly object _limitLock = new();
         
         // Track seen IDs to avoid duplicate logging (cleared when data changes)
         private readonly Dictionary<long, int> _lastSeenItems = new(); 
@@ -336,12 +338,29 @@ namespace TRONPANELE_CEKME.Services
                 _logger.LogInformation("✨ Worker-{WorkerId}: Aday ID: {Id}, Tutar: {Amount:N2}", workerId, data.Id, amount);
             }
 
-            if (_totalProcessedCount >= _settings.MaxRecordCount) return;
-            if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) return;
+            // ATOMİK REZERVASYON: Yarış durumunu (race condition) önlemek için kilit kullanıyoruz.
+            lock (_limitLock)
+            {
+                if (_totalProcessedCount >= _settings.MaxRecordCount) return;
+                if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) return;
+
+                // Geçici olarak rezerve et (İşlem başarılı olursa kalıcı olacak, başarısız olursa geri iade edilecek)
+                _totalProcessedCount++;
+                _totalProcessedAmount += amount;
+            }
 
             lock (_activeProcessingIds)
             {
-                if (_activeProcessingIds.Contains(data.Id)) return;
+                if (_activeProcessingIds.Contains(data.Id))
+                {
+                    // Rezerveyi geri al, zaten işleniyor
+                    lock (_limitLock)
+                    {
+                        _totalProcessedCount--;
+                        _totalProcessedAmount -= amount;
+                    }
+                    return;
+                }
                 _activeProcessingIds.Add(data.Id);
             }
 
@@ -377,9 +396,7 @@ namespace TRONPANELE_CEKME.Services
 
                 if (response != null && response.Status)
                 {
-                    _totalProcessedAmount += amount;
-                    _totalProcessedCount++;
-                    
+                    // İŞLEM BAŞARILI: Rezerve edilen limitler kalıcı hale gelir.
                     _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2} | Toplam: {TotalCount}/{MaxCount} Kayıt, {TotalAmount:N2} TRY", 
                         data.Id, amount, _totalProcessedCount, _settings.MaxRecordCount, _totalProcessedAmount);
 
@@ -389,6 +406,13 @@ namespace TRONPANELE_CEKME.Services
                 }
                 else
                 {
+                    // İŞLEM BAŞARISIZ: Rezerve edilen limitleri geri iade ediyoruz.
+                    lock (_limitLock)
+                    {
+                        _totalProcessedCount--;
+                        _totalProcessedAmount -= amount;
+                    }
+
                     string msg = response?.Message ?? "Boş Yanıt";
                     bool shouldLogErr = false;
                     lock (_lastErrorMessages)
@@ -407,6 +431,12 @@ namespace TRONPANELE_CEKME.Services
             }
             catch (Exception ex)
             {
+                // HATA OLUŞTU: Rezerve edilen limitleri geri iade ediyoruz.
+                lock (_limitLock)
+                {
+                    _totalProcessedCount--;
+                    _totalProcessedAmount -= amount;
+                }
                 _logger.LogError("⚠️ İşlem Hatası: ID: {Id}, Mesaj: {Message}", data.Id, ex.Message);
             }
             finally
