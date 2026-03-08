@@ -8,6 +8,7 @@ namespace TRONPANELE_CEKME.Services
     {
         Task<string> GetAsync(string url, bool isAjax = false);
         Task<string> PostAjaxAsync(string url, Dictionary<string, string> data);
+        Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data);
         string? GetCookie(string name);
     }
 
@@ -87,9 +88,7 @@ namespace TRONPANELE_CEKME.Services
                 // Add AJAX header for this request
                  var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
                  request.Headers.Add("X-Requested-With", "XMLHttpRequest");
-                 request.Headers.Remove("Accept");
-                 request.Headers.Add("Accept", "application/json, text/javascript, */*; q=0.01");
- 
+                 
                  var response = await _httpClient.SendAsync(request);
                 
                 if (response.StatusCode == HttpStatusCode.Redirect || response.StatusCode == HttpStatusCode.MovedPermanently || response.StatusCode == HttpStatusCode.SeeOther || response.StatusCode == HttpStatusCode.TemporaryRedirect)
@@ -103,7 +102,7 @@ namespace TRONPANELE_CEKME.Services
                         return await GetAsync(redirectUrl);
                     }
                 }
-
+                
                 response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync();
             }
@@ -112,6 +111,18 @@ namespace TRONPANELE_CEKME.Services
                 _logger.LogError(ex, "POST AJAX isteği sırasında hata oluştu: {Url}", url);
                 throw;
             }
+        }
+
+        public async Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data)
+        {
+            var content = new FormUrlEncodedContent(data);
+            var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+            request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+
+            // HttpCompletionOption.ResponseHeadersRead: Gövdenin tamamını beklemeden stream'i açar
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStreamAsync();
         }
 
         public string? GetCookie(string name)

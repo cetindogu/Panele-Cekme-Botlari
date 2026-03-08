@@ -3,7 +3,8 @@ using HtmlAgilityPack;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Hosting;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using TRONPANELE_CEKME.Models;
 
 namespace TRONPANELE_CEKME.Services
@@ -64,8 +65,8 @@ namespace TRONPANELE_CEKME.Services
 
             _logger.LogInformation("✅ Giriş başarılı. İzleme başlatılıyor...");
 
-            // Start 3 parallel workers with staggering
-            int workerCount = 3;
+            // Start workers from settings
+            int workerCount = _settings.WorkerCount > 0 ? _settings.WorkerCount : 3;
             var workers = new List<Task>();
             for (int i = 0; i < workerCount; i++)
             {
@@ -95,6 +96,9 @@ namespace TRONPANELE_CEKME.Services
         {
             _logger.LogInformation("👷 Worker-{WorkerId} başlatıldı.", workerId);
 
+            // Reusable buffer for streaming
+            byte[] buffer = new byte[1024 * 16]; // 16KB buffer
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 // Check limits BEFORE starting a new poll
@@ -122,88 +126,55 @@ namespace TRONPANELE_CEKME.Services
                         }
                     }
 
-                    // 2. Get withdrawal list via POST AJAX with the token
+                    // 2. Get withdrawal list via POST AJAX with the token (STREAMING with System.Text.Json)
                     var postData = new Dictionary<string, string> { ["_token"] = _csrfToken };
-                    var jsonResponse = await _httpClient.PostAjaxAsync(_settings.AjaxUrl, postData);
                     
-                    if (string.IsNullOrWhiteSpace(jsonResponse) || jsonResponse.Trim().StartsWith("<"))
+                    using (var stream = await _httpClient.PostAjaxStreamAsync(_settings.AjaxUrl, postData))
                     {
-                        _csrfToken = null; // Force refresh
-                        await Task.Delay(1000, stoppingToken);
-                        continue;
-                    }
-
-                    var response = JsonConvert.DeserializeObject<WithdrawalListResponse>(jsonResponse);
-
-                    if (response == null || !response.Status)
-                    {
-                        if (response?.Message?.Contains("CSRF", StringComparison.OrdinalIgnoreCase) == true) _csrfToken = null;
-                        await Task.Delay(_settings.PollingIntervalMs, stoppingToken);
-                        continue;
-                    }
-
-                    var allItems = response.Datas ?? new List<WithdrawalData>();
-
-                    var candidates = allItems.Where(d => 
-                    {
-                        if (d.Proc != 0) return false;
+                        // System.Text.Json: Utf8JsonReader ile byte bazlı streaming
+                        // Source Generator kullanarak Reflection hatasını gideriyoruz.
+                        var readerOptions = new JsonReaderOptions { AllowTrailingCommas = true };
+                        var state = new JsonReaderState(readerOptions);
                         
-                        // Kendi başarıyla işlediğimiz kayıtları tekrar denemeyelim
-                        lock (_processedIds)
+                        int bytesRead;
+                        byte[] leftOver = Array.Empty<byte>();
+
+                        while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) > 0)
                         {
-                            if (_processedIds.Contains(d.Id)) return false;
-                        }
-
-                        try 
-                        {
-                            var amt = ParseAmount(d.Amount);
-                            return amt >= _settings.MinAmount && amt <= _settings.MaxAmount;
-                        }
-                        catch { return false; }
-                    }).ToList();
-
-                    if (candidates.Any())
-                    {
-                        // Process all candidates in parallel without waiting for them to finish before next poll
-                        foreach (var data in candidates)
-                        {
-                            if (stoppingToken.IsCancellationRequested) break;
-
-                            decimal amount = 0;
-                            try { amount = ParseAmount(data.Amount); } catch { continue; }
-
-                            // LOGLAMA MANTIĞI: Sadece yeni görülen veya durumu değişen adayları logla
-                            bool shouldLog = false;
-                            lock (_lastSeenItems)
+                            // HTML Kontrolü (Hata sayfası gelmiş olabilir)
+                            if (leftOver.Length == 0 && buffer[0] == '<')
                             {
-                                if (!_lastSeenItems.ContainsKey(data.Id) || _lastSeenItems[data.Id] != data.Proc)
-                                {
-                                    _lastSeenItems[data.Id] = data.Proc;
-                                    shouldLog = true;
-                                }
+                                _logger.LogWarning("⚠️ Worker-{WorkerId}: JSON yerine HTML yanıt alındı (Rate limited?).", workerId);
+                                await Task.Delay(2000, stoppingToken);
+                                break;
                             }
 
-                            if (shouldLog)
+                            var currentData = leftOver.Length > 0 ? new byte[leftOver.Length + bytesRead] : new byte[bytesRead];
+                            if (leftOver.Length > 0)
                             {
-                                _logger.LogInformation("✨ Worker-{WorkerId}: Aday ID: {Id}, Tutar: {Amount:N2}", workerId, data.Id, amount);
+                                Buffer.BlockCopy(leftOver, 0, currentData, 0, leftOver.Length);
+                                Buffer.BlockCopy(buffer, 0, currentData, leftOver.Length, bytesRead);
+                            }
+                            else
+                            {
+                                Buffer.BlockCopy(buffer, 0, currentData, 0, bytesRead);
                             }
 
-                            if (_totalProcessedCount >= _settings.MaxRecordCount) continue;
-                            if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) continue;
-
-                            // İŞLEME MANTIĞI: Bu ID için hali hazırda devam eden bir istek (POST) varsa yeni istek başlatma
-                            lock (_activeProcessingIds)
+                            // Utf8JsonReader (ref struct) must be processed in a separate non-async method
+                            int consumed = ProcessJsonChunk(currentData, ref state, workerId, stoppingToken);
+                            
+                            if (consumed < currentData.Length)
                             {
-                                if (_activeProcessingIds.Contains(data.Id)) continue;
-                                _activeProcessingIds.Add(data.Id);
+                                leftOver = currentData.Skip(consumed).ToArray();
                             }
-
-                            // Fire and forget (don't await) to continue polling immediately
-                            _ = ProcessDataAsync(data, amount);
+                            else
+                            {
+                                leftOver = Array.Empty<byte>();
+                            }
                         }
                     }
 
-                    // Global limit check
+                    // Global limit check (her döngü sonunda bir kez kontrol yeterli)
                     if (_totalProcessedAmount + _settings.MinAmount > _settings.MaxTotalAmount)
                     {
                         _logger.LogWarning("⛔ Limit aşıldı. Uygulama sonlandırılıyor.");
@@ -220,6 +191,123 @@ namespace TRONPANELE_CEKME.Services
                     await Task.Delay(1000, stoppingToken);
                 }
             }
+        }
+
+        private int ProcessJsonChunk(byte[] dataBuffer, ref JsonReaderState state, int workerId, CancellationToken stoppingToken)
+        {
+            var reader = new Utf8JsonReader(dataBuffer, isFinalBlock: false, state);
+            long bytesConsumed = 0;
+
+            try
+            {
+                while (reader.Read())
+                {
+                    if (reader.TokenType == JsonTokenType.PropertyName && 
+                        (reader.ValueTextEquals("Datas") || reader.ValueTextEquals("datas")))
+                    {
+                        if (reader.Read() && reader.TokenType == JsonTokenType.StartArray)
+                        {
+                            while (true)
+                            {
+                                // Her obje denemesi öncesi state'i saklayamayız (ref struct), 
+                                // ama okuduğumuz yeri biliyoruz.
+                                
+                                try
+                                {
+                                    if (!reader.Read()) break;
+                                    if (reader.TokenType == JsonTokenType.EndArray) break;
+                                    if (reader.TokenType != JsonTokenType.StartObject) continue;
+
+                                    // Başarılı bir obje okumayı dene
+                                    var data = JsonSerializer.Deserialize(ref reader, AppJsonContext.Default.WithdrawalData);
+                                    if (data != null)
+                                    {
+                                        CheckAndProcessSingleCandidate(data, workerId, stoppingToken);
+                                    }
+                                    
+                                    // Başarılı okuma sonrası tüketilen byte'ı güncelle
+                                    bytesConsumed = reader.BytesConsumed;
+                                }
+                                catch (JsonException)
+                                {
+                                    // Obje yarım kaldı, döngüden çık ve sadece başarılı okunan kısmı raporla
+                                    // state'i güncellemeden çıkacağız, böylece bir sonraki turda
+                                    // leftOver + yeni veri ile tekrar denenecek.
+                                    goto PartialData;
+                                }
+                            }
+                        }
+                    }
+                    bytesConsumed = reader.BytesConsumed;
+                }
+            }
+            catch (JsonException)
+            {
+                // Genel JSON yapısı bozuk veya yarım
+            }
+
+            PartialData:
+            // Sadece başarıyla işlenen (tamamlanan) byte kadar ilerle
+            // Yarım kalan kısım (reader.BytesConsumed - bytesConsumed) bir sonraki tura kalacak
+            
+            // State'i en son BAŞARILI okuma noktasına göre güncellememiz lazım ama 
+            // Utf8JsonReader state'i geri alınamaz. 
+            // Bu yüzden "bytesConsumed" değişkenini return ederek çağırana 
+            // "bu kadarını işledim, gerisi sende" diyoruz.
+            
+            // Eğer hiç ilerleyemediysek (0 byte), ve buffer doluysa muhtemelen çok büyük bir obje var
+            // veya bozuk veri var. Sonsuz döngüye girmemek için kontrol gerekebilir.
+            
+            state = reader.CurrentState; 
+            return (int)bytesConsumed; 
+        }
+
+        private void CheckAndProcessSingleCandidate(WithdrawalData data, int workerId, CancellationToken stoppingToken)
+        {
+            if (data.Proc != 0) return;
+
+            lock (_processedIds)
+            {
+                if (_processedIds.Contains(data.Id)) return;
+            }
+
+            decimal amount = 0;
+            try 
+            { 
+                amount = ParseAmount(data.Amount); 
+            } 
+            catch { return; }
+
+            if (amount < _settings.MinAmount || amount > _settings.MaxAmount) return;
+
+            // LOGLAMA MANTIĞI: Sadece yeni görülen veya durumu değişen adayları logla
+            bool shouldLog = false;
+            lock (_lastSeenItems)
+            {
+                if (!_lastSeenItems.ContainsKey(data.Id) || _lastSeenItems[data.Id] != data.Proc)
+                {
+                    _lastSeenItems[data.Id] = data.Proc;
+                    shouldLog = true;
+                }
+            }
+
+            if (shouldLog)
+            {
+                _logger.LogInformation("✨ Worker-{WorkerId}: Aday ID: {Id}, Tutar: {Amount:N2}", workerId, data.Id, amount);
+            }
+
+            if (_totalProcessedCount >= _settings.MaxRecordCount) return;
+            if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) return;
+
+            // İŞLEME MANTIĞI: Bu ID için hali hazırda devam eden bir istek (POST) varsa yeni istek başlatma
+            lock (_activeProcessingIds)
+            {
+                if (_activeProcessingIds.Contains(data.Id)) return;
+                _activeProcessingIds.Add(data.Id);
+            }
+
+            // Fire and forget (don't await) to continue polling/streaming immediately
+            _ = ProcessDataAsync(data, amount);
         }
 
         public Task StartMonitoringAsync(CancellationToken cancellationToken)
@@ -242,7 +330,7 @@ namespace TRONPANELE_CEKME.Services
                 };
                 
                 var responseJson = await _httpClient.PostAjaxAsync(_settings.ProcessUrl, postData);
-                var response = JsonConvert.DeserializeObject<ProcessResponse>(responseJson);
+                var response = JsonSerializer.Deserialize(responseJson, AppJsonContext.Default.ProcessResponse);
 
                 if (response != null && response.Status)
                 {

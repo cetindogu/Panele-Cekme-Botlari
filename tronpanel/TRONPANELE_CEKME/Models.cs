@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace TRONPANELE_CEKME.Models
 {
     public class AppSettings
@@ -23,6 +25,7 @@ namespace TRONPANELE_CEKME.Models
         public decimal MaxAmount { get; set; } = 100000;
         public decimal MaxTotalAmount { get; set; } = 500000;
         public int MaxRecordCount { get; set; } = 50;
+        public int WorkerCount { get; set; } = 3;
         public bool PreviewMode { get; set; } = true;
     }
 
@@ -59,5 +62,13 @@ namespace TRONPANELE_CEKME.Models
         public decimal Amount { get; set; }
         public string Status { get; set; } = "";
         public bool CanProcess { get; set; }
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
+    [JsonSerializable(typeof(WithdrawalListResponse))]
+    [JsonSerializable(typeof(WithdrawalData))]
+    [JsonSerializable(typeof(ProcessResponse))]
+    public partial class AppJsonContext : JsonSerializerContext
+    {
     }
 }
