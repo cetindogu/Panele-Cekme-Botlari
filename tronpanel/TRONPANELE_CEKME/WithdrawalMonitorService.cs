@@ -127,17 +127,17 @@ namespace TRONPANELE_CEKME.Services
                     }
 
                     // 2. Get withdrawal list via POST AJAX with the token (STREAMING with System.Text.Json)
-                    var postData = new Dictionary<string, string> { ["_token"] = _csrfToken };
+                    var postData = new Dictionary<string, string> { ["_token"] = _csrfToken ?? "" };
                     
                     using (var stream = await _httpClient.PostAjaxStreamAsync(_settings.AjaxUrl, postData))
                     {
-                        // System.Text.Json: Utf8JsonReader ile byte bazlı streaming
-                        // Source Generator kullanarak Reflection hatasını gideriyoruz.
                         var readerOptions = new JsonReaderOptions { AllowTrailingCommas = true };
                         var state = new JsonReaderState(readerOptions);
                         
                         int bytesRead;
                         byte[] leftOver = Array.Empty<byte>();
+                        int totalPendingItems = 0;
+                        int totalCandidateItems = 0;
 
                         while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) > 0)
                         {
@@ -161,7 +161,10 @@ namespace TRONPANELE_CEKME.Services
                             }
 
                             // Utf8JsonReader (ref struct) must be processed in a separate non-async method
-                            int consumed = ProcessJsonChunk(currentData, ref state, workerId, stoppingToken);
+                            var result = ProcessJsonChunk(currentData, ref state, workerId, stoppingToken);
+                            totalPendingItems += result.PendingCount;
+                            totalCandidateItems += result.CandidateCount;
+                            int consumed = result.BytesConsumed;
                             
                             if (consumed < currentData.Length)
                             {
@@ -171,6 +174,12 @@ namespace TRONPANELE_CEKME.Services
                             {
                                 leftOver = Array.Empty<byte>();
                             }
+                        }
+
+                        if (totalPendingItems > 0)
+                        {
+                            _logger.LogDebug("📊 Worker-{WorkerId}: {CandidateCount} adet aday bulundu. (Toplam işlenmemiş: {PendingCount})", 
+                                workerId, totalCandidateItems, totalPendingItems);
                         }
                     }
 
@@ -193,10 +202,12 @@ namespace TRONPANELE_CEKME.Services
             }
         }
 
-        private int ProcessJsonChunk(byte[] dataBuffer, ref JsonReaderState state, int workerId, CancellationToken stoppingToken)
+        private (int PendingCount, int CandidateCount, int BytesConsumed) ProcessJsonChunk(byte[] dataBuffer, ref JsonReaderState state, int workerId, CancellationToken stoppingToken)
         {
             var reader = new Utf8JsonReader(dataBuffer, isFinalBlock: false, state);
             long bytesConsumed = 0;
+            int pendingFound = 0;
+            int candidatesFound = 0;
 
             try
             {
@@ -209,30 +220,73 @@ namespace TRONPANELE_CEKME.Services
                         {
                             while (true)
                             {
-                                // Her obje denemesi öncesi state'i saklayamayız (ref struct), 
-                                // ama okuduğumuz yeri biliyoruz.
-                                
                                 try
                                 {
                                     if (!reader.Read()) break;
                                     if (reader.TokenType == JsonTokenType.EndArray) break;
                                     if (reader.TokenType != JsonTokenType.StartObject) continue;
 
-                                    // Başarılı bir obje okumayı dene
-                                    var data = JsonSerializer.Deserialize(ref reader, AppJsonContext.Default.WithdrawalData);
-                                    if (data != null)
+                                    // FIELD-LEVEL STREAMING (Safe & Robust)
+                                    long currentId = 0;
+                                    string currentAmount = "";
+                                    int currentProc = -1;
+
+                                    bool isObjectFinished = false;
+                                    while (reader.Read())
                                     {
-                                        CheckAndProcessSingleCandidate(data, workerId, stoppingToken);
+                                        if (reader.TokenType == JsonTokenType.EndObject)
+                                        {
+                                            isObjectFinished = true;
+                                            break;
+                                        }
+
+                                        if (reader.TokenType == JsonTokenType.PropertyName)
+                                        {
+                                            string propName = reader.GetString() ?? "";
+                                            if (!reader.Read()) break;
+
+                                            if (propName.Equals("id", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                if (reader.TokenType == JsonTokenType.Number) currentId = reader.GetInt64();
+                                                else if (reader.TokenType == JsonTokenType.String && long.TryParse(reader.GetString(), out var lid)) currentId = lid;
+                                            }
+                                            else if (propName.Equals("amount", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                currentAmount = reader.TokenType == JsonTokenType.String ? (reader.GetString() ?? "") : reader.GetDouble().ToString();
+                                            }
+                                            else if (propName.Equals("proc", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                if (reader.TokenType == JsonTokenType.Number) currentProc = reader.GetInt32();
+                                                else if (reader.TokenType == JsonTokenType.String && int.TryParse(reader.GetString(), out var pid)) currentProc = pid;
+
+                                                if (currentProc != -1 && currentProc != 0)
+                                                {
+                                                    reader.TrySkip();
+                                                    isObjectFinished = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (!isObjectFinished) goto PartialData;
+
+                                    if (currentProc == 0 && currentId > 0)
+                                    {
+                                        pendingFound++;
+                                        // KRİTER KONTROLÜ
+                                        decimal amount = ParseAmount(currentAmount);
+                                        if (amount >= _settings.MinAmount && amount <= _settings.MaxAmount)
+                                        {
+                                            candidatesFound++;
+                                            CheckAndProcessSingleCandidate(new WithdrawalData { Id = currentId, Amount = currentAmount, Proc = currentProc }, workerId, stoppingToken);
+                                        }
                                     }
                                     
-                                    // Başarılı okuma sonrası tüketilen byte'ı güncelle
                                     bytesConsumed = reader.BytesConsumed;
                                 }
                                 catch (JsonException)
                                 {
-                                    // Obje yarım kaldı, döngüden çık ve sadece başarılı okunan kısmı raporla
-                                    // state'i güncellemeden çıkacağız, böylece bir sonraki turda
-                                    // leftOver + yeni veri ile tekrar denenecek.
                                     goto PartialData;
                                 }
                             }
@@ -247,44 +301,26 @@ namespace TRONPANELE_CEKME.Services
             }
 
             PartialData:
-            // Sadece başarıyla işlenen (tamamlanan) byte kadar ilerle
-            // Yarım kalan kısım (reader.BytesConsumed - bytesConsumed) bir sonraki tura kalacak
-            
-            // State'i en son BAŞARILI okuma noktasına göre güncellememiz lazım ama 
-            // Utf8JsonReader state'i geri alınamaz. 
-            // Bu yüzden "bytesConsumed" değişkenini return ederek çağırana 
-            // "bu kadarını işledim, gerisi sende" diyoruz.
-            
-            // Eğer hiç ilerleyemediysek (0 byte), ve buffer doluysa muhtemelen çok büyük bir obje var
-            // veya bozuk veri var. Sonsuz döngüye girmemek için kontrol gerekebilir.
-            
             state = reader.CurrentState; 
-            return (int)bytesConsumed; 
+            return (pendingFound, candidatesFound, (int)bytesConsumed); 
         }
 
         private void CheckAndProcessSingleCandidate(WithdrawalData data, int workerId, CancellationToken stoppingToken)
         {
-            if (data.Proc != 0) return;
-
+            // data.Proc ve Amount zaten ProcessJsonChunk içinde kontrol edildi.
+            
             lock (_processedIds)
             {
                 if (_processedIds.Contains(data.Id)) return;
             }
 
-            decimal amount = 0;
-            try 
-            { 
-                amount = ParseAmount(data.Amount); 
-            } 
-            catch { return; }
+            decimal amount = ParseAmount(data.Amount);
 
-            if (amount < _settings.MinAmount || amount > _settings.MaxAmount) return;
-
-            // LOGLAMA MANTIĞI: Sadece yeni görülen veya durumu değişen adayları logla
+            // LOGLAMA MANTIĞI: Sadece yeni görülen adayları logla
             bool shouldLog = false;
             lock (_lastSeenItems)
             {
-                if (!_lastSeenItems.ContainsKey(data.Id) || _lastSeenItems[data.Id] != data.Proc)
+                if (!_lastSeenItems.ContainsKey(data.Id))
                 {
                     _lastSeenItems[data.Id] = data.Proc;
                     shouldLog = true;
@@ -299,14 +335,12 @@ namespace TRONPANELE_CEKME.Services
             if (_totalProcessedCount >= _settings.MaxRecordCount) return;
             if (_totalProcessedAmount + amount > _settings.MaxTotalAmount) return;
 
-            // İŞLEME MANTIĞI: Bu ID için hali hazırda devam eden bir istek (POST) varsa yeni istek başlatma
             lock (_activeProcessingIds)
             {
                 if (_activeProcessingIds.Contains(data.Id)) return;
                 _activeProcessingIds.Add(data.Id);
             }
 
-            // Fire and forget (don't await) to continue polling/streaming immediately
             _ = ProcessDataAsync(data, amount);
         }
 
