@@ -24,6 +24,7 @@ namespace TRONPANELE_CEKME.Services
         
         private decimal _totalProcessedAmount = 0;
         private int _totalProcessedCount = 0;
+        private int _activeTaskCount = 0; // Aktif işlem sayısını takip et
         private readonly object _limitLock = new();
         
         // Track seen IDs to avoid duplicate logging (cleared when data changes)
@@ -104,11 +105,15 @@ namespace TRONPANELE_CEKME.Services
             while (!stoppingToken.IsCancellationRequested)
             {
                 // Check limits BEFORE starting a new poll
-                if (_totalProcessedCount >= _settings.MaxRecordCount)
+                // SADECE aktif işlem yoksa ve limit dolmuşsa kapat!
+                lock (_limitLock)
                 {
-                    _logger.LogWarning("⛔ Maksimum kayıt sayısına ({MaxCount}) ulaşıldı. Uygulama sonlandırılıyor.", _settings.MaxRecordCount);
-                    _lifetime.StopApplication();
-                    break;
+                    if (_totalProcessedCount >= _settings.MaxRecordCount && _activeTaskCount == 0)
+                    {
+                        _logger.LogWarning("⛔ Maksimum kayıt sayısına ({MaxCount}) ulaşıldı ve tüm işlemler tamamlandı. Uygulama sonlandırılıyor.", _settings.MaxRecordCount);
+                        _lifetime.StopApplication();
+                        break;
+                    }
                 }
 
                 try
@@ -347,6 +352,7 @@ namespace TRONPANELE_CEKME.Services
                 // Geçici olarak rezerve et (İşlem başarılı olursa kalıcı olacak, başarısız olursa geri iade edilecek)
                 _totalProcessedCount++;
                 _totalProcessedAmount += amount;
+                _activeTaskCount++; // Aktif işlemi artır
             }
 
             lock (_activeProcessingIds)
@@ -358,6 +364,7 @@ namespace TRONPANELE_CEKME.Services
                     {
                         _totalProcessedCount--;
                         _totalProcessedAmount -= amount;
+                        _activeTaskCount--; // Aktif işlemi azalt
                     }
                     return;
                 }
@@ -397,6 +404,8 @@ namespace TRONPANELE_CEKME.Services
                 if (response != null && response.Status)
                 {
                     // İŞLEM BAŞARILI: Rezerve edilen limitler kalıcı hale gelir.
+                    lock (_limitLock) { _activeTaskCount--; } // Aktif işlem bitti
+
                     _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2} | Toplam: {TotalCount}/{MaxCount} Kayıt, {TotalAmount:N2} TRY", 
                         data.Id, amount, _totalProcessedCount, _settings.MaxRecordCount, _totalProcessedAmount);
 
@@ -411,6 +420,7 @@ namespace TRONPANELE_CEKME.Services
                     {
                         _totalProcessedCount--;
                         _totalProcessedAmount -= amount;
+                        _activeTaskCount--; // Aktif işlem bitti
                     }
 
                     string msg = response?.Message ?? "Boş Yanıt";
@@ -436,6 +446,7 @@ namespace TRONPANELE_CEKME.Services
                 {
                     _totalProcessedCount--;
                     _totalProcessedAmount -= amount;
+                    _activeTaskCount--; // Aktif işlem bitti
                 }
                 _logger.LogError("⚠️ İşlem Hatası: ID: {Id}, Mesaj: {Message}", data.Id, ex.Message);
             }
