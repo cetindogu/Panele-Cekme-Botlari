@@ -377,9 +377,12 @@ namespace TRONPANELE_CEKME.Services
 
                 if (response != null && response.Status)
                 {
-                    _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2}", data.Id, amount);
                     _totalProcessedAmount += amount;
                     _totalProcessedCount++;
+                    
+                    _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2} | Toplam: {TotalCount}/{MaxCount} Kayıt, {TotalAmount:N2} TRY", 
+                        data.Id, amount, _totalProcessedCount, _settings.MaxRecordCount, _totalProcessedAmount);
+
                     lock (_processedIds) { _processedIds.Add(data.Id); }
                     lock (_lastSeenItems) { _lastSeenItems[data.Id] = 1; }
                     lock (_lastErrorMessages) { _lastErrorMessages.Remove(data.Id); }
