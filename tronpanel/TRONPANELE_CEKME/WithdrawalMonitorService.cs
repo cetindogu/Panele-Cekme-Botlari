@@ -127,9 +127,13 @@ namespace TRONPANELE_CEKME.Services
                     }
 
                     // 2. Get withdrawal list via POST AJAX with the token (STREAMING with System.Text.Json)
-                    var postData = new Dictionary<string, string> { ["_token"] = _csrfToken ?? "" };
+                    var postData = new Dictionary<string, string>(); // No body data needed for list
+                    var extraHeaders = new Dictionary<string, string>
+                    {
+                        ["X-CSRF-TOKEN"] = _csrfToken ?? ""
+                    };
                     
-                    using (var stream = await _httpClient.PostAjaxStreamAsync(_settings.AjaxUrl, postData))
+                    using (var stream = await _httpClient.PostAjaxStreamAsync(_settings.AjaxUrl, postData, extraHeaders))
                     {
                         var readerOptions = new JsonReaderOptions { AllowTrailingCommas = true };
                         var state = new JsonReaderState(readerOptions);
@@ -359,11 +363,16 @@ namespace TRONPANELE_CEKME.Services
                 // Minimize logging in the critical path
                 var postData = new Dictionary<string, string> 
                 { 
-                    ["data-id"] = data.Id.ToString(),
-                    ["_token"] = _csrfToken ?? ""
+                    ["record"] = data.Id.ToString() // Corrected parameter name from 'id'/'data-id' to 'record'
                 };
                 
-                var responseJson = await _httpClient.PostAjaxAsync(_settings.ProcessUrl, postData);
+                var extraHeaders = new Dictionary<string, string>
+                {
+                    ["Referer"] = _settings.PageUrl, // Some servers check referer
+                    ["X-CSRF-TOKEN"] = _csrfToken ?? "" // Laravel uses this for AJAX
+                };
+                
+                var responseJson = await _httpClient.PostAjaxAsync(_settings.ProcessUrl, postData, extraHeaders);
                 var response = JsonSerializer.Deserialize(responseJson, AppJsonContext.Default.ProcessResponse);
 
                 if (response != null && response.Status)

@@ -7,8 +7,8 @@ namespace TRONPANELE_CEKME.Services
     public interface IHttpClientService
     {
         Task<string> GetAsync(string url, bool isAjax = false);
-        Task<string> PostAjaxAsync(string url, Dictionary<string, string> data);
-        Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data);
+        Task<string> PostAjaxAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null);
+        Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null);
         string? GetCookie(string name);
     }
 
@@ -79,7 +79,7 @@ namespace TRONPANELE_CEKME.Services
             }
         }
 
-        public async Task<string> PostAjaxAsync(string url, Dictionary<string, string> data)
+        public async Task<string> PostAjaxAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null)
         {
             try
             {
@@ -88,6 +88,16 @@ namespace TRONPANELE_CEKME.Services
                 // Add AJAX header for this request
                  var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
                  request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+                 
+                 // Add extra headers if provided
+                 if (headers != null)
+                 {
+                     foreach (var header in headers)
+                     {
+                         if (request.Headers.Contains(header.Key)) request.Headers.Remove(header.Key);
+                         request.Headers.Add(header.Key, header.Value);
+                     }
+                 }
                  
                  var response = await _httpClient.SendAsync(request);
                 
@@ -113,11 +123,20 @@ namespace TRONPANELE_CEKME.Services
             }
         }
 
-        public async Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data)
+        public async Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null)
         {
             var content = new FormUrlEncodedContent(data);
             var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             request.Headers.Add("X-Requested-With", "XMLHttpRequest");
+
+            if (headers != null)
+            {
+                foreach (var header in headers)
+                {
+                    if (request.Headers.Contains(header.Key)) request.Headers.Remove(header.Key);
+                    request.Headers.Add(header.Key, header.Value);
+                }
+            }
 
             // HttpCompletionOption.ResponseHeadersRead: Gövdenin tamamını beklemeden stream'i açar
             var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);

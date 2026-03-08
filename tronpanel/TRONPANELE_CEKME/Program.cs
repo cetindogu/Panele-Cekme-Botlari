@@ -38,7 +38,10 @@ namespace TRONPANELE_CEKME
                     .UseSerilog()
                     .ConfigureServices((context, services) =>
                     {
+                        // AOT-safe configuration loading
                         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
+
+                        // Register services
                         services.AddSingleton<ICredentialProvider, ObfuscatedCredentialProvider>();
                         services.AddSingleton<IHttpClientService, HttpClientService>();
                         services.AddSingleton<ILoginService, LoginService>();

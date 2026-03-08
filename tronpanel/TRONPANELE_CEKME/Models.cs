@@ -68,6 +68,9 @@ namespace TRONPANELE_CEKME.Models
     [JsonSerializable(typeof(WithdrawalListResponse))]
     [JsonSerializable(typeof(WithdrawalData))]
     [JsonSerializable(typeof(ProcessResponse))]
+    [JsonSerializable(typeof(AppSettings))]
+    [JsonSerializable(typeof(WithdrawalSettings))]
+    [JsonSerializable(typeof(LoginSettings))]
     public partial class AppJsonContext : JsonSerializerContext
     {
     }
