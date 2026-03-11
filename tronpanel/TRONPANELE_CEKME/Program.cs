@@ -45,6 +45,7 @@ namespace TRONPANELE_CEKME
                         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
 
                         // Register services
+                        services.AddSingleton<IStatisticsService, StatisticsService>();
                         services.AddSingleton<ICredentialProvider, ObfuscatedCredentialProvider>();
                         services.AddSingleton<IHttpClientService, HttpClientService>();
                         services.AddSingleton<ILoginService, LoginService>();

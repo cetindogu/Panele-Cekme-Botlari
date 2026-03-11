@@ -21,6 +21,7 @@ namespace TRONPANELE_CEKME.Services
         private readonly ILoginService _loginService;
         private readonly WithdrawalSettings _settings;
         private readonly IHostApplicationLifetime _lifetime;
+        private readonly IStatisticsService _stats;
         
         private decimal _totalProcessedAmount = 0;
         private int _totalProcessedCount = 0;
@@ -36,24 +37,33 @@ namespace TRONPANELE_CEKME.Services
         // Track last error message per ID to avoid duplicate log spam
         private readonly Dictionary<long, string> _lastErrorMessages = new();
 
+        // New: Track latest items from list for dashboard display
+        private readonly List<WithdrawalData> _latestListItems = new();
+        private readonly List<string> _successLogs = new();
+        private readonly object _dashboardLock = new();
+
         public WithdrawalMonitorService(
             IHttpClientService httpClient,
             ILogger<WithdrawalMonitorService> logger,
             IOptions<AppSettings> settings,
             ILoginService loginService,
-            IHostApplicationLifetime lifetime)
+            IHostApplicationLifetime lifetime,
+            IStatisticsService stats)
         {
             _httpClient = httpClient;
             _logger = logger;
             _loginService = loginService;
             _settings = settings.Value.Withdrawals;
             _lifetime = lifetime;
+            _stats = stats;
         }
 
         private string? _csrfToken;
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _stats.SetTargets(_settings.MaxRecordCount, _settings.MaxTotalAmount, _settings.MinAmount, _settings.MaxAmount);
+
             _logger.LogInformation("🚀 Çekim izleme başlatıldı. (PreviewMode: {PreviewMode})", _settings.PreviewMode);
             _logger.LogInformation("📊 Limitler: Min Tutar: {Min}, Max Tutar: {Max}, Toplam Max Tutar: {TotalMax}, Max Kayıt: {MaxCount}",
                 _settings.MinAmount, _settings.MaxAmount, _settings.MaxTotalAmount, _settings.MaxRecordCount);
@@ -70,14 +80,108 @@ namespace TRONPANELE_CEKME.Services
 
             // Start workers from settings
             int workerCount = _settings.WorkerCount > 0 ? _settings.WorkerCount : 3;
-            var workers = new List<Task>();
+            var tasks = new List<Task>();
+            
+            // Start dashboard update loop
+            tasks.Add(RunDashboardUpdateLoopAsync(stoppingToken));
+
             for (int i = 0; i < workerCount; i++)
             {
-                workers.Add(RunMonitorLoopAsync(i, stoppingToken));
+                tasks.Add(RunMonitorLoopAsync(i, stoppingToken));
                 await Task.Delay(300, stoppingToken); // 300ms staggered start
             }
 
-            await Task.WhenAll(workers);
+            await Task.WhenAll(tasks);
+        }
+
+        private async Task RunDashboardUpdateLoopAsync(CancellationToken stoppingToken)
+        {
+            // Initial clear to prepare for dashboard
+            Console.Clear();
+            
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                var stats = _stats.GetStats();
+                
+                // Display status at the top of the CURRENT WINDOW
+                var prevColor = Console.ForegroundColor;
+                
+                try 
+                {
+                    // Use WindowTop to stay at the top of the visible area
+                    int windowTop = Console.WindowTop;
+                    int windowWidth = Console.WindowWidth;
+                    Console.SetCursorPosition(0, windowTop);
+                    
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(new string('=', Math.Max(0, windowWidth - 1)));
+                    
+                    Console.Write($"🚀 [TRONPANEL] ");
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.Write($"RPS: {stats.RPS:F2} | RPM: {stats.RPM:F0} | İstek: {stats.TotalRequests}");
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write($" | Hata: {stats.FailureCount}");
+                    // Clear line
+                    int currentLeft = Console.CursorLeft;
+                    Console.Write(new string(' ', Math.Max(0, windowWidth - currentLeft - 1)));
+                    Console.WriteLine();
+                    
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.Write($"📊 [İŞLEMLER]  ");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.Write($"İşlenen: {stats.SuccessCount}/{stats.TargetCount}");
+                    Console.ForegroundColor = ConsoleColor.Magenta;
+                    Console.Write($" | Tutar: {stats.SuccessAmount:N0}/{stats.TargetAmount:N0} TRY");
+                    Console.ForegroundColor = ConsoleColor.Blue;
+                    Console.Write($" | Filtre: {stats.MinAmount:N0}-{stats.MaxAmount:N0} TRY");
+                    // Clear line
+                    currentLeft = Console.CursorLeft;
+                    Console.Write(new string(' ', Math.Max(0, windowWidth - currentLeft - 1)));
+                    Console.WriteLine();
+                    
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(new string('=', Math.Max(0, windowWidth - 1)));
+                    
+                    // Show successful processes (Persistent)
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("✅ SON ONAYLANANLAR:");
+                    lock (_dashboardLock)
+                    {
+                        foreach (var log in _successLogs.TakeLast(5))
+                        {
+                            Console.Write("  " + log);
+                            Console.WriteLine(new string(' ', Math.Max(0, windowWidth - log.Length - 3)));
+                        }
+                        // Fill empty slots to maintain height if needed, or just clear
+                        for (int i = 0; i < 5 - _successLogs.Count; i++) Console.WriteLine(new string(' ', windowWidth - 1));
+                    }
+                    
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(new string('-', Math.Max(0, windowWidth - 1)));
+                    
+                    // Show latest items from list
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("🔍 SON TARANAN KAYITLAR:");
+                    lock (_dashboardLock)
+                    {
+                        foreach (var item in _latestListItems.Take(8))
+                        {
+                            string itemLine = $"  ID: {item.Id,-12} | Tutar: {item.Amount,10} | Durum: {(item.Proc == 0 ? "Bekliyor" : "İşlemde")}";
+                            Console.Write(itemLine);
+                            Console.WriteLine(new string(' ', Math.Max(0, windowWidth - itemLine.Length - 1)));
+                        }
+                        for (int i = 0; i < 8 - _latestListItems.Count; i++) Console.WriteLine(new string(' ', windowWidth - 1));
+                    }
+                    
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine(new string('=', Math.Max(0, windowWidth - 1)));
+                    Console.ResetColor();
+                }
+                catch { /* Ignore cursor errors */ }
+                finally { Console.ForegroundColor = prevColor; }
+                
+                await Task.Delay(1000, stoppingToken);
+            }
         }
 
         private decimal ParseAmount(string amountStr)
@@ -97,7 +201,7 @@ namespace TRONPANELE_CEKME.Services
 
         private async Task RunMonitorLoopAsync(int workerId, CancellationToken stoppingToken)
         {
-            _logger.LogInformation("👷 Worker-{WorkerId} başlatıldı.", workerId);
+            _logger.LogDebug("👷 Worker-{WorkerId} başlatıldı.", workerId);
 
             // Reusable buffer for streaming
             byte[] buffer = new byte[1024 * 16]; // 16KB buffer
@@ -122,7 +226,7 @@ namespace TRONPANELE_CEKME.Services
                     if (string.IsNullOrEmpty(_csrfToken))
                     {
                         // Staggered race to get token if missing
-                        _logger.LogInformation("🔑 Worker-{WorkerId}: CSRF token yenileniyor...", workerId);
+                        _logger.LogDebug("🔑 Worker-{WorkerId}: CSRF token yenileniyor...", workerId);
                         var pageHtml = await _httpClient.GetAsync(_settings.PageUrl);
                         _csrfToken = ExtractTokenFromHtml(pageHtml);
 
@@ -149,6 +253,7 @@ namespace TRONPANELE_CEKME.Services
                         byte[] leftOver = Array.Empty<byte>();
                         int totalPendingItems = 0;
                         int totalCandidateItems = 0;
+                        var pollItems = new List<WithdrawalData>();
 
                         while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) > 0)
                         {
@@ -175,6 +280,12 @@ namespace TRONPANELE_CEKME.Services
                             var result = ProcessJsonChunk(currentData, ref state, workerId, stoppingToken);
                             totalPendingItems += result.PendingCount;
                             totalCandidateItems += result.CandidateCount;
+                            
+                            if (result.LatestItems.Count > 0)
+                            {
+                                pollItems.AddRange(result.LatestItems);
+                            }
+
                             int consumed = result.BytesConsumed;
                             
                             if (consumed < currentData.Length)
@@ -184,6 +295,17 @@ namespace TRONPANELE_CEKME.Services
                             else
                             {
                                 leftOver = Array.Empty<byte>();
+                            }
+                        }
+
+                        // NEW: Update dashboard items after poll is complete
+                        if (pollItems.Count > 0)
+                        {
+                            lock (_dashboardLock)
+                            {
+                                _latestListItems.Clear();
+                                // Sadece benzersiz ID'leri ve son 10 taneyi alalım
+                                _latestListItems.AddRange(pollItems.GroupBy(x => x.Id).Select(g => g.First()).Take(10));
                             }
                         }
 
@@ -213,12 +335,13 @@ namespace TRONPANELE_CEKME.Services
             }
         }
 
-        private (int PendingCount, int CandidateCount, int BytesConsumed) ProcessJsonChunk(byte[] dataBuffer, ref JsonReaderState state, int workerId, CancellationToken stoppingToken)
+        private (int PendingCount, int CandidateCount, int BytesConsumed, List<WithdrawalData> LatestItems) ProcessJsonChunk(byte[] dataBuffer, ref JsonReaderState state, int workerId, CancellationToken stoppingToken)
         {
             var reader = new Utf8JsonReader(dataBuffer, isFinalBlock: false, state);
             long bytesConsumed = 0;
             int pendingFound = 0;
             int candidatesFound = 0;
+            var latestItems = new List<WithdrawalData>();
 
             try
             {
@@ -269,28 +392,27 @@ namespace TRONPANELE_CEKME.Services
                                             {
                                                 if (reader.TokenType == JsonTokenType.Number) currentProc = reader.GetInt32();
                                                 else if (reader.TokenType == JsonTokenType.String && int.TryParse(reader.GetString(), out var pid)) currentProc = pid;
-
-                                                if (currentProc != -1 && currentProc != 0)
-                                                {
-                                                    reader.TrySkip();
-                                                    isObjectFinished = true;
-                                                    break;
-                                                }
                                             }
                                         }
                                     }
 
                                     if (!isObjectFinished) goto PartialData;
 
-                                    if (currentProc == 0 && currentId > 0)
+                                    if (currentId > 0)
                                     {
-                                        pendingFound++;
-                                        // KRİTER KONTROLÜ
-                                        decimal amount = ParseAmount(currentAmount);
-                                        if (amount >= _settings.MinAmount && amount <= _settings.MaxAmount)
+                                        var item = new WithdrawalData { Id = currentId, Amount = currentAmount, Proc = currentProc };
+                                        latestItems.Add(item);
+
+                                        if (currentProc == 0)
                                         {
-                                            candidatesFound++;
-                                            CheckAndProcessSingleCandidate(new WithdrawalData { Id = currentId, Amount = currentAmount, Proc = currentProc }, workerId, stoppingToken);
+                                            pendingFound++;
+                                            // KRİTER KONTROLÜ
+                                            decimal amount = ParseAmount(currentAmount);
+                                            if (amount >= _settings.MinAmount && amount <= _settings.MaxAmount)
+                                            {
+                                                candidatesFound++;
+                                                CheckAndProcessSingleCandidate(item, workerId, stoppingToken);
+                                            }
                                         }
                                     }
                                     
@@ -313,7 +435,7 @@ namespace TRONPANELE_CEKME.Services
 
             PartialData:
             state = reader.CurrentState; 
-            return (pendingFound, candidatesFound, (int)bytesConsumed); 
+            return (pendingFound, candidatesFound, (int)bytesConsumed, latestItems); 
         }
 
         private void CheckAndProcessSingleCandidate(WithdrawalData data, int workerId, CancellationToken stoppingToken)
@@ -340,7 +462,11 @@ namespace TRONPANELE_CEKME.Services
 
             if (shouldLog)
             {
-                _logger.LogInformation("✨ Worker-{WorkerId}: Aday ID: {Id}, Tutar: {Amount:N2}", workerId, data.Id, amount);
+                // Highlight candidate in cyan
+                var prevColor = Console.ForegroundColor;
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                _logger.LogInformation("✨ Yeni Aday Bulundu: ID: {Id}, Tutar: {Amount:N2} TRY", data.Id, amount);
+                Console.ForegroundColor = prevColor;
             }
 
             // ATOMİK REZERVASYON: Yarış durumunu (race condition) önlemek için kilit kullanıyoruz.
@@ -405,9 +531,18 @@ namespace TRONPANELE_CEKME.Services
                 {
                     // İŞLEM BAŞARILI: Rezerve edilen limitler kalıcı hale gelir.
                     lock (_limitLock) { _activeTaskCount--; } // Aktif işlem bitti
+                    _stats.IncrementSuccess(amount);
 
-                    _logger.LogInformation("✅ ONAYLANDI! ID: {Id}, Tutar: {Amount:N2} | Toplam: {TotalCount}/{MaxCount} Kayıt, {TotalAmount:N2} TRY", 
-                        data.Id, amount, _totalProcessedCount, _settings.MaxRecordCount, _totalProcessedAmount);
+                    string logMsg = $"ID: {data.Id}, Tutar: {amount:N2} | Toplam: {_totalProcessedCount}/{_settings.MaxRecordCount}";
+                    lock (_dashboardLock)
+                    {
+                        _successLogs.Add(logMsg);
+                    }
+
+                    var prevColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    _logger.LogInformation("✅ ONAYLANDI! {LogMsg}", logMsg);
+                    Console.ForegroundColor = prevColor;
 
                     lock (_processedIds) { _processedIds.Add(data.Id); }
                     lock (_lastSeenItems) { _lastSeenItems[data.Id] = 1; }
@@ -415,6 +550,7 @@ namespace TRONPANELE_CEKME.Services
                 }
                 else
                 {
+                    _stats.IncrementFailure();
                     // İŞLEM BAŞARISIZ: Rezerve edilen limitleri geri iade ediyoruz.
                     lock (_limitLock)
                     {
@@ -435,7 +571,10 @@ namespace TRONPANELE_CEKME.Services
                     }
                     if (shouldLogErr)
                     {
+                        var prevColor = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Red;
                         _logger.LogWarning("❌ Alınamadı! ID: {Id}, Yanıt: {Message}", data.Id, msg);
+                        Console.ForegroundColor = prevColor;
                     }
                 }
             }

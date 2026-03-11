@@ -17,10 +17,12 @@ namespace TRONPANELE_CEKME.Services
         private readonly HttpClient _httpClient;
         private readonly CookieContainer _cookieContainer;
         private readonly ILogger<HttpClientService> _logger;
+        private readonly IStatisticsService _stats;
 
-        public HttpClientService(ILogger<HttpClientService> logger)
+        public HttpClientService(ILogger<HttpClientService> logger, IStatisticsService stats)
         {
             _logger = logger;
+            _stats = stats;
             _cookieContainer = new CookieContainer();
             var handler = new HttpClientHandler
             {
@@ -41,6 +43,7 @@ namespace TRONPANELE_CEKME.Services
 
         public async Task<string> GetAsync(string url, bool isAjax = false)
         {
+            _stats.IncrementRequest();
             try
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -81,6 +84,7 @@ namespace TRONPANELE_CEKME.Services
 
         public async Task<string> PostAjaxAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null)
         {
+            _stats.IncrementRequest();
             try
             {
                 var content = new FormUrlEncodedContent(data);
@@ -125,6 +129,7 @@ namespace TRONPANELE_CEKME.Services
 
         public async Task<Stream> PostAjaxStreamAsync(string url, Dictionary<string, string> data, Dictionary<string, string>? headers = null)
         {
+            _stats.IncrementRequest();
             var content = new FormUrlEncodedContent(data);
             var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             request.Headers.Add("X-Requested-With", "XMLHttpRequest");

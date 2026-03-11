@@ -1,7 +1,7 @@
 # Tron Panel Cekme Deployment Script (Windows 11)
 
 $PROJECT_DIR = "TRONPANELE_CEKME"
-$PUBLISH_DIR = "$PROJECT_DIR\bin\Release\net10.0\publish"
+$PUBLISH_DIR = "$PROJECT_DIR\bin\Release\net10.0\publish\linux-x64"
 $GCLOUD_PATH = "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
 $VM_NAME = "instance-20260308-013736"
 $VM_USER = "cetindogu"
