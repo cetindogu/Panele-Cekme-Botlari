@@ -11,11 +11,14 @@
     <OptimizationPreference>Speed</OptimizationPreference>
     <StackTraceSupport>false</StackTraceSupport>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- Suppress IL2104 as we are rooting these assemblies manually -->
+    <NoWarn>$(NoWarn);IL2104</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <TrimmerRootAssembly Include="TRONPANELE_CEKME" />
     <TrimmerRootAssembly Include="HtmlAgilityPack" />
+    <TrimmerRootAssembly Include="Serilog.Settings.Configuration" />
   </ItemGroup>
 
   <ItemGroup>
