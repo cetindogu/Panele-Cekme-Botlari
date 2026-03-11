@@ -67,14 +67,13 @@ namespace TRONPANELE_CEKME.Services
         {
             CleanOldTimestamps();
             var now = DateTime.Now;
-            var fiveSecondsAgo = now.AddSeconds(-5);
             var minuteAgo = now.AddMinutes(-1);
 
             var timestamps = _requestTimestamps.ToArray();
             
-            // Son 5 saniyedeki istek sayısını 5.0'a bölerek ondalıklı RPS elde ediyoruz
-            double rps = timestamps.Count(t => t >= fiveSecondsAgo) / 5.0;
+            // RPM üzerinden hesaplanan stabil ortalama RPS
             double rpm = timestamps.Count(t => t >= minuteAgo);
+            double rps = rpm / 60.0;
 
             return (_totalRequests, rps, rpm, _successCount, _successAmount, _failureCount, _targetCount, _targetAmount, _minAmount, _maxAmount);
         }
