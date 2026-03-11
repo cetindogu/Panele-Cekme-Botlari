@@ -20,10 +20,13 @@ namespace TRONPANELE_CEKME
                 .Build();
 
             // 2. Configure Serilog - Use code-based sink configuration for better trimming support
+            var logPath = Environment.GetEnvironmentVariable("LOG_PATH") ?? 
+                          (OperatingSystem.IsLinux() ? "/var/log/tronpanel/log-.txt" : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs/log-.txt"));
+
             Log.Logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration) // Still read levels and other settings
                 .WriteTo.Console() // Explicitly call to ensure it's not trimmed
-                .WriteTo.File(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs/log-.txt"), 
+                .WriteTo.File(logPath, 
                     rollingInterval: RollingInterval.Day,
                     retainedFileCountLimit: 7)
                 .Enrich.FromLogContext()

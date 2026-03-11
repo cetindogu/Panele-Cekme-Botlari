@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <PublishAot>true</PublishAot>
-    <IsAotCompatible>true</IsAotCompatible>
+    <!--<PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>-->
     <OptimizationPreference>Speed</OptimizationPreference>
     <StackTraceSupport>false</StackTraceSupport>
     <InvariantGlobalization>false</InvariantGlobalization>
